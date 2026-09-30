@@ -2,7 +2,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { expenseMonthlyEntry, expenseCategory, family } from "@/db/schema";
+import { expenseMonthlyEntry, expenseCategory, family, itemArchive } from "@/db/schema";
 
 async function requireUser() {
   const { userId } = await auth();
@@ -10,28 +10,33 @@ async function requireUser() {
   return userId;
 }
 
-/** Familias, gastos (globales + propios) e importes del año, en un solo batch. */
+/** Familias, gastos e importes del año. Oculta lo dado de baja desde ese año (o antes). */
 export async function loadYear(year: number) {
   const userId = await requireUser();
   const db = getDb();
-  const [families, categories, entries] = await db.batch([
+  const [fams, cats, entries, archives] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year))),
+    db.select().from(itemArchive).where(eq(itemArchive.userId, userId)),
   ]);
-  const visible = categories.filter((c) => c.archivedFromYear == null || year < c.archivedFromYear);
-  return { families, categories: visible, entries };
+  const gone = (type: string, id: string) => archives.some((a) => a.itemType === type && a.itemId === id && a.fromYear <= year);
+  const families = fams.filter((f) => !gone("family", f.id));
+  const ok = new Set(families.map((f) => f.id));
+  const categories = cats.filter((c) => ok.has(c.familyId) && !gone("category", c.id));
+  return { families, categories, entries };
 }
 
-/** Estructura completa (incluye gastos dados de baja) para la pantalla de gestión. */
+/** Estructura completa (incluye bajas) para la pantalla de gestión. */
 export async function loadStructure() {
   const userId = await requireUser();
   const db = getDb();
-  const [families, categories] = await db.batch([
+  const [families, categories, archives] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+    db.select().from(itemArchive).where(eq(itemArchive.userId, userId)),
   ]);
-  return { families, categories };
+  return { families, categories, archives };
 }
 
 /** Upsert de una o varias celdas en un único db.batch (una sola ida a D1). */
@@ -89,13 +94,16 @@ export async function renameCategory(id: string, name: string) {
   await getDb().update(expenseCategory).set({ name }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
 }
 
-/** Baja desde un año: desaparece de la grilla desde ese año; años anteriores e informes no cambian. */
-export async function archiveCategory(id: string, fromYear: number) {
+/** Baja desde un año, para elementos propios o por defecto (solo afecta a este usuario). */
+export async function archiveItem(itemType: "family" | "category", itemId: string, fromYear: number) {
   const userId = await requireUser();
-  await getDb().update(expenseCategory).set({ archivedFromYear: fromYear }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+  await getDb().insert(itemArchive).values({ userId, itemType, itemId, fromYear }).onConflictDoUpdate({
+    target: [itemArchive.userId, itemArchive.itemType, itemArchive.itemId],
+    set: { fromYear: sql`excluded.from_year` },
+  });
 }
 
-export async function restoreCategory(id: string) {
+export async function restoreItem(itemType: "family" | "category", itemId: string) {
   const userId = await requireUser();
-  await getDb().update(expenseCategory).set({ archivedFromYear: null }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+  await getDb().delete(itemArchive).where(and(eq(itemArchive.userId, userId), eq(itemArchive.itemType, itemType), eq(itemArchive.itemId, itemId)));
 }
