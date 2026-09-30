@@ -1,0 +1,39 @@
+{
+  "name": "spending-planner",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "pages:build": "npx @cloudflare/next-on-pages",
+    "preview": "npm run pages:build && wrangler pages dev",
+    "deploy": "npm run pages:build && wrangler pages deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply spending-planner-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply spending-planner-db --remote",
+    "db:seed:local": "wrangler d1 execute spending-planner-db --local --file=./db/seed.sql",
+    "db:seed:remote": "wrangler d1 execute spending-planner-db --remote --file=./db/seed.sql"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.0.0",
+    "drizzle-orm": "^0.36.0",
+    "lucide-react": "^0.400.0",
+    "next": "15.0.3",
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "recharts": "^2.13.0"
+  },
+  "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.13.5",
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "@types/node": "^22",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "drizzle-kit": "^0.28.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.90.0"
+  }
+}
