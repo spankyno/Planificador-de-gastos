@@ -121,7 +121,7 @@ export default function Report({ years, families, categories, entries }: { years
           </table>
         </div>
       ) : (
-        <div className={`grid gap-6 ${(dim === "tipo" || dim === "familia") ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" : ""}`}>
+        <div className={`grid grid-cols-[minmax(0,1fr)] gap-6 ${(dim === "tipo" || dim === "familia") ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" : ""}`}>
           {(dim === "tipo" || dim === "familia") && (
             <section>
               <h2 className="mb-2 text-sm font-medium">Reparto {last}</h2>
@@ -135,12 +135,12 @@ export default function Report({ years, families, categories, entries }: { years
               )}
             </section>
           )}
-          <section>
+          <section className="min-w-0">
             <h2 className="mb-2 text-sm font-medium">{multi ? "Comparativa por año" : `Importe ${last}`}</h2>
             <ResponsiveContainer width="100%" height={horizontal ? Math.max(300, rows.length * 26 * years.length + 60) : 300}>
               <BarChart data={data} layout={horizontal ? "vertical" : "horizontal"} margin={{ left: horizontal ? 8 : 0 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                {horizontal ? <><XAxis type="number" tickFormatter={(v) => `${v / 1000}k`} /><YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12 }} /></>
+                {horizontal ? <><XAxis type="number" tickFormatter={(v) => `${v / 1000}k`} /><YAxis type="category" dataKey="name" width={170} interval={0} tick={{ fontSize: 12 }} /></>
                   : <><XAxis dataKey="name" /><YAxis tickFormatter={(v) => `${v / 1000}k`} /></>}
                 <Tooltip formatter={(v: number) => eur(v)} />{multi && <Legend />}
                 {years.map((y, i) => <Bar key={y} dataKey={String(y)} fill={YEAR_COLORS[i % 4]} />)}
