@@ -19,7 +19,19 @@ export async function loadYear(year: number) {
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year))),
   ]);
-  return { families, categories, entries };
+  const visible = categories.filter((c) => c.archivedFromYear == null || year < c.archivedFromYear);
+  return { families, categories: visible, entries };
+}
+
+/** Estructura completa (incluye gastos dados de baja) para la pantalla de gestión. */
+export async function loadStructure() {
+  const userId = await requireUser();
+  const db = getDb();
+  const [families, categories] = await db.batch([
+    db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
+    db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+  ]);
+  return { families, categories };
 }
 
 /** Upsert de una o varias celdas en un único db.batch (una sola ida a D1). */
@@ -64,4 +76,26 @@ export async function loadReport(years: number[]) {
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), inArray(expenseMonthlyEntry.year, years))),
   ]);
   return { families, categories, entries };
+}
+
+/** Solo se pueden modificar elementos propios (los globales por defecto quedan intactos). */
+export async function renameFamily(id: string, name: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+  const userId = await requireUser();
+  await getDb().update(family).set({ name, type }).where(and(eq(family.id, id), eq(family.userId, userId)));
+}
+
+export async function renameCategory(id: string, name: string) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ name }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
+
+/** Baja desde un año: desaparece de la grilla desde ese año; años anteriores e informes no cambian. */
+export async function archiveCategory(id: string, fromYear: number) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ archivedFromYear: fromYear }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
+
+export async function restoreCategory(id: string) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ archivedFromYear: null }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
 }
