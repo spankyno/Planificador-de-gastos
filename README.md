@@ -8,7 +8,7 @@ Planificador de gastos anuales: una grilla de gastos por meses, agrupados en fam
 
 | Función | Estado |
 |---|---|
-| Grilla anual editable con totales y modo oscuro | Hecho |
+| Grilla anual editable con totales y modo oscuro | Hecho | 
 | Periodificación (repetir / prorratear en meses) | Hecho |
 | Login con Clerk y rutas protegidas | Hecho |
 | Formulario de familias y gastos propios | Pendiente (acciones de servidor listas) |
