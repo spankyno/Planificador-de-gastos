@@ -1,10 +1,10 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createFamily, createCategory } from "@/app/actions";
+import { createFamily, createCategory, renameFamily, renameCategory, archiveCategory, restoreCategory } from "@/app/actions";
 
 type Fam = { id: string; name: string; type: "FIJO" | "VARIABLE" | "DISCRECIONAL"; userId: string | null };
-type Cat = { id: string; name: string; familyId: string; userId: string | null };
+type Cat = { id: string; name: string; familyId: string; userId: string | null; archivedFromYear: number | null };
 const TIPOS = ["FIJO", "VARIABLE", "DISCRECIONAL"] as const;
 const input = "w-full rounded border p-2 dark:border-slate-700 dark:bg-slate-900";
 
@@ -15,6 +15,10 @@ export default function ManageForm({ families, categories }: { families: Fam[]; 
   const [fType, setFType] = useState<Fam["type"]>("VARIABLE");
   const [cName, setCName] = useState("");
   const [cFam, setCFam] = useState(families[0]?.id ?? "");
+
+  const year = new Date().getFullYear();
+  const act = (fn: () => Promise<void>) => start(async () => { await fn(); router.refresh(); });
+  const link = "text-xs text-blue-600 hover:underline disabled:opacity-50";
 
   const run = (fn: () => Promise<void>, reset: () => void) =>
     start(async () => { await fn(); reset(); router.refresh(); });
@@ -50,10 +54,38 @@ export default function ManageForm({ families, categories }: { families: Fam[]; 
         <ul className="space-y-3">
           {families.map((f) => (
             <li key={f.id} className="rounded border p-3 dark:border-slate-800">
-              <p className="font-medium">{f.name} <span className="text-xs text-slate-500">{f.type}{f.userId ? "" : " · por defecto"}</span></p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {categories.filter((c) => c.familyId === f.id).map((c) => c.name).join(", ") || "Sin gastos todavía"}
+              <p className="font-medium">
+                {f.name} <span className="text-xs text-slate-500">{f.type}{f.userId ? "" : " · por defecto"}</span>
+                {f.userId && (
+                  <button disabled={pending} className={`ml-3 ${link}`} onClick={() => {
+                    const n = window.prompt("Nuevo nombre de la familia", f.name)?.trim();
+                    if (n) act(() => renameFamily(f.id, n, f.type));
+                  }}>Renombrar</button>
+                )}
               </p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {categories.filter((c) => c.familyId === f.id).map((c) => (
+                  <li key={c.id} className={c.archivedFromYear ? "text-slate-500" : ""}>
+                    {c.name}
+                    {c.archivedFromYear && <span className="ml-2 text-xs">(baja desde {c.archivedFromYear})</span>}
+                    {c.userId && (
+                      <span className="ml-3 space-x-3">
+                        <button disabled={pending} className={link} onClick={() => {
+                          const n = window.prompt("Nuevo nombre del gasto", c.name)?.trim();
+                          if (n) act(() => renameCategory(c.id, n));
+                        }}>Renombrar</button>
+                        {c.archivedFromYear
+                          ? <button disabled={pending} className={link} onClick={() => act(() => restoreCategory(c.id))}>Reactivar</button>
+                          : <button disabled={pending} className={link} onClick={() => {
+                              const y = Number(window.prompt(`Dar de baja desde el año (se conserva el historial anterior)`, String(year)));
+                              if (y > 1990 && y < 2100) act(() => archiveCategory(c.id, y));
+                            }}>Dar de baja</button>}
+                      </span>
+                    )}
+                  </li>
+                ))}
+                {categories.filter((c) => c.familyId === f.id).length === 0 && <li className="text-slate-500">Sin gastos todavía</li>}
+              </ul>
             </li>
           ))}
         </ul>
