@@ -1,0 +1,101 @@
+"use server";
+import { auth } from "@clerk/nextjs/server";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { getDb } from "@/db";
+import { expenseMonthlyEntry, expenseCategory, family } from "@/db/schema";
+
+async function requireUser() {
+  const { userId } = await auth();
+  if (!userId) throw new Error("No autenticado");
+  return userId;
+}
+
+/** Familias, gastos (globales + propios) e importes del año, en un solo batch. */
+export async function loadYear(year: number) {
+  const userId = await requireUser();
+  const db = getDb();
+  const [families, categories, entries] = await db.batch([
+    db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
+    db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+    db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year))),
+  ]);
+  const visible = categories.filter((c) => c.archivedFromYear == null || year < c.archivedFromYear);
+  return { families, categories: visible, entries };
+}
+
+/** Estructura completa (incluye gastos dados de baja) para la pantalla de gestión. */
+export async function loadStructure() {
+  const userId = await requireUser();
+  const db = getDb();
+  const [families, categories] = await db.batch([
+    db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
+    db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+  ]);
+  return { families, categories };
+}
+
+/** Upsert de una o varias celdas en un único db.batch (una sola ida a D1). */
+export async function saveCells(cells: { categoryId: string; year: number; month: number; amount: number }[]) {
+  const userId = await requireUser();
+  if (!cells.length) return;
+  const db = getDb();
+  const stmts = cells.map((c) =>
+    db.insert(expenseMonthlyEntry)
+      .values({ userId, expenseCategoryId: c.categoryId, year: c.year, month: c.month, amount: c.amount })
+      .onConflictDoUpdate({
+        target: [expenseMonthlyEntry.userId, expenseMonthlyEntry.expenseCategoryId, expenseMonthlyEntry.year, expenseMonthlyEntry.month],
+        set: { amount: sql`excluded.amount` },
+      })
+  );
+  await db.batch(stmts as [(typeof stmts)[0], ...(typeof stmts)]);
+}
+
+/** Periodificación: "repeat" replica el importe; "split" lo prorratea entre los meses. */
+export async function spreadAmount(i: { categoryId: string; year: number; months: number[]; amount: number; mode: "repeat" | "split" }) {
+  const per = i.mode === "split" ? Math.round((i.amount / i.months.length) * 100) / 100 : i.amount;
+  await saveCells(i.months.map((m) => ({ categoryId: i.categoryId, year: i.year, month: m, amount: per })));
+}
+
+export async function createFamily(name: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+  const userId = await requireUser();
+  await getDb().insert(family).values({ name, type, userId });
+}
+
+export async function createCategory(name: string, familyId: string) {
+  const userId = await requireUser();
+  await getDb().insert(expenseCategory).values({ name, familyId, userId });
+}
+
+/** Datos para informes: importes de varios años en un solo batch. */
+export async function loadReport(years: number[]) {
+  const userId = await requireUser();
+  const db = getDb();
+  const [families, categories, entries] = await db.batch([
+    db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
+    db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+    db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), inArray(expenseMonthlyEntry.year, years))),
+  ]);
+  return { families, categories, entries };
+}
+
+/** Solo se pueden modificar elementos propios (los globales por defecto quedan intactos). */
+export async function renameFamily(id: string, name: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+  const userId = await requireUser();
+  await getDb().update(family).set({ name, type }).where(and(eq(family.id, id), eq(family.userId, userId)));
+}
+
+export async function renameCategory(id: string, name: string) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ name }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
+
+/** Baja desde un año: desaparece de la grilla desde ese año; años anteriores e informes no cambian. */
+export async function archiveCategory(id: string, fromYear: number) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ archivedFromYear: fromYear }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
+
+export async function restoreCategory(id: string) {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ archivedFromYear: null }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
