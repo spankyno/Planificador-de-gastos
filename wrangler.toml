@@ -6,5 +6,5 @@ pages_build_output_dir = ".vercel/output/static"
 [[d1_databases]]
 binding = "DB"
 database_name = "spending-planner-db"
-database_id = "REEMPLAZA_CON_TU_DATABASE_ID"  # sale de `wrangler d1 create spending-planner-db`
+database_id = "c684dd25-9349-48f6-b1a2-c7a762940b8d"  # sale de `wrangler d1 create spending-planner-db`
 migrations_dir = "migrations"
