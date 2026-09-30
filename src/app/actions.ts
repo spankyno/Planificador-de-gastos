@@ -1,6 +1,6 @@
 "use server";
 import { auth } from "@clerk/nextjs/server";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseMonthlyEntry, expenseCategory, family } from "@/db/schema";
 
@@ -52,4 +52,16 @@ export async function createFamily(name: string, type: "FIJO" | "VARIABLE" | "DI
 export async function createCategory(name: string, familyId: string) {
   const userId = await requireUser();
   await getDb().insert(expenseCategory).values({ name, familyId, userId });
+}
+
+/** Datos para informes: importes de varios años en un solo batch. */
+export async function loadReport(years: number[]) {
+  const userId = await requireUser();
+  const db = getDb();
+  const [families, categories, entries] = await db.batch([
+    db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
+    db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
+    db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), inArray(expenseMonthlyEntry.year, years))),
+  ]);
+  return { families, categories, entries };
 }
