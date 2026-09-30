@@ -2,11 +2,11 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Ban, Check, Lock, Pencil, Plus, RotateCcw, Search, X } from "lucide-react";
-import { archiveItem, createCategory, createFamily, renameCategory, renameFamily, restoreItem } from "@/app/actions";
+import { archiveItem, createCategory, createFamily, renameCategory, renameFamily, restoreItem, setCategoryType } from "@/app/actions";
 
 type Tipo = "FIJO" | "VARIABLE" | "DISCRECIONAL";
 type Fam = { id: string; name: string; type: Tipo; userId: string | null };
-type Cat = { id: string; name: string; familyId: string; userId: string | null };
+type Cat = { id: string; name: string; familyId: string; userId: string | null; type: Tipo | null };
 type Arc = { itemType: "family" | "category"; itemId: string; fromYear: number };
 type Target = { kind: "family" | "category"; id: string; name: string };
 
@@ -53,17 +53,17 @@ export default function ManageForm({ families, categories, archives }: { familie
     return <span className="text-emerald-600">● Activo</span>;
   };
 
-  const saveName = (kind: "family" | "category", id: string, type?: Tipo) => {
+  const saveName = (kind: "family" | "category", id: string) => {
     const name = edit?.draft.trim(); if (!name) return;
-    act(() => (kind === "family" ? renameFamily(id, name, type!) : renameCategory(id, name)), () => setEdit(null));
+    act(() => (kind === "family" ? renameFamily(id, name) : renameCategory(id, name)), () => setEdit(null));
   };
 
   const NameCell = ({ kind, id, name, own, type, bold }: { kind: "family" | "category"; id: string; name: string; own: boolean; type?: Tipo; bold?: boolean }) =>
     edit?.id === id ? (
       <span className="flex items-center gap-1">
         <input autoFocus className={`${field} w-56`} value={edit.draft} onChange={(e) => setEdit({ id, draft: e.target.value })}
-          onKeyDown={(e) => { if (e.key === "Enter") saveName(kind, id, type); if (e.key === "Escape") setEdit(null); }} />
-        <button aria-label="Guardar" className={ghost} onClick={() => saveName(kind, id, type)}><Check size={14} /></button>
+          onKeyDown={(e) => { if (e.key === "Enter") saveName(kind, id); if (e.key === "Escape") setEdit(null); }} />
+        <button aria-label="Guardar" className={ghost} onClick={() => saveName(kind, id)}><Check size={14} /></button>
         <button aria-label="Cancelar" className={ghost} onClick={() => setEdit(null)}><X size={14} /></button>
       </span>
     ) : (
@@ -78,8 +78,9 @@ export default function ManageForm({ families, categories, archives }: { familie
     <tr className="border-t dark:border-slate-800"><td colSpan={4} className="py-2 pl-10 pr-3">
       <span className="flex items-center gap-2">
         <input autoFocus className={`${field} w-64`} placeholder="Nombre del gasto" value={draft} onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && draft.trim()) act(() => createCategory(draft.trim(), famId), () => { setDraft(""); setAdding(null); }); if (e.key === "Escape") setAdding(null); }} />
-        <button disabled={pending || !draft.trim()} className={ghost} onClick={() => act(() => createCategory(draft.trim(), famId), () => { setDraft(""); setAdding(null); })}><Check size={14} /> Añadir</button>
+          onKeyDown={(e) => { if (e.key === "Enter" && draft.trim()) act(() => createCategory(draft.trim(), famId, draftType), () => { setDraft(""); setAdding(null); }); if (e.key === "Escape") setAdding(null); }} />
+        <select aria-label="Tipo de gasto" className={field} value={draftType} onChange={(e) => setDraftType(e.target.value as Tipo)}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select>
+        <button disabled={pending || !draft.trim()} className={ghost} onClick={() => act(() => createCategory(draft.trim(), famId, draftType), () => { setDraft(""); setAdding(null); })}><Check size={14} /> Añadir</button>
         <button className={ghost} onClick={() => setAdding(null)}>Cancelar</button>
       </span>
     </td></tr>
@@ -111,8 +112,7 @@ export default function ManageForm({ families, categories, archives }: { familie
             <tbody><tr className="bg-slate-50 dark:bg-slate-900"><td colSpan={4} className="p-3">
               <span className="flex flex-wrap items-center gap-2">
                 <input autoFocus className={`${field} w-64`} placeholder="Nombre de la familia" value={draft} onChange={(e) => setDraft(e.target.value)} />
-                <select className={field} value={draftType} onChange={(e) => setDraftType(e.target.value as Tipo)}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select>
-                <button disabled={pending || !draft.trim()} className={ghost} onClick={() => act(() => createFamily(draft.trim(), draftType), () => setAdding(null))}><Check size={14} /> Crear</button>
+                                <button disabled={pending || !draft.trim()} className={ghost} onClick={() => act(() => createFamily(draft.trim()), () => setAdding(null))}><Check size={14} /> Crear</button>
                 <button className={ghost} onClick={() => setAdding(null)}>Cancelar</button>
               </span>
             </td></tr></tbody>
@@ -121,14 +121,9 @@ export default function ManageForm({ families, categories, archives }: { familie
             const fa = arc("family", f.id);
             return (
               <tbody key={f.id}>
-                <tr className={`border-l-4 ${TONE[f.type].bar} ${TONE[f.type].row} ${fa ? "opacity-70" : ""}`}>
-                  <td className="p-3">{NameCell({ kind: "family", id: f.id, name: f.name, own: !!f.userId, type: f.type, bold: true })}</td>
-                  <td className="p-3">
-                    {f.userId ? (
-                      <select aria-label="Tipo" disabled={pending} className={`${field} ${TONE[f.type].badge}`} value={f.type}
-                        onChange={(e) => act(() => renameFamily(f.id, f.name, e.target.value as Tipo))}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select>
-                    ) : <span className={`rounded px-2 py-0.5 text-xs ${TONE[f.type].badge}`}>{f.type}</span>}
-                  </td>
+                <tr className={`border-l-4 border-l-slate-400 bg-slate-100/70 dark:bg-slate-900/60 ${fa ? "opacity-70" : ""}`}>
+                  <td className="p-3">{NameCell({ kind: "family", id: f.id, name: f.name, own: !!f.userId, bold: true })}</td>
+                  <td className="p-3" />
                   <td className="p-3">{status("family", f.id)}</td>
                   <td className="p-3 text-right">
                     {fa ? <button disabled={pending} className={ghost} onClick={() => act(() => restoreItem("family", f.id))}><RotateCcw size={13} /> Reactivar</button>
@@ -140,7 +135,12 @@ export default function ManageForm({ families, categories, archives }: { familie
                   return (
                     <tr key={c.id} className={`border-t dark:border-slate-800 ${ca || fa ? "text-slate-500" : ""}`}>
                       <td className="py-2 pl-10 pr-3">{NameCell({ kind: "category", id: c.id, name: c.name, own: !!c.userId })}</td>
-                      <td className="p-2" />
+                      <td className="p-2">
+                        {c.userId ? (
+                          <select aria-label="Tipo de gasto" disabled={pending} className={`${field} ${TONE[c.type ?? "VARIABLE"].badge}`} value={c.type ?? "VARIABLE"}
+                            onChange={(e) => act(() => setCategoryType(c.id, e.target.value as Tipo))}>{TIPOS.map((t) => <option key={t}>{t}</option>)}</select>
+                        ) : <span className={`rounded px-2 py-0.5 text-xs ${TONE[c.type ?? "VARIABLE"].badge}`}>{c.type ?? "VARIABLE"}</span>}
+                      </td>
                       <td className="p-2">{status("category", c.id, !ca && fa ? fa : undefined)}</td>
                       <td className="p-2 text-right">
                         {ca ? <button disabled={pending} className={ghost} onClick={() => act(() => restoreItem("category", c.id))}><RotateCcw size={13} /> Reactivar</button>

@@ -10,7 +10,8 @@ export const userPreference = sqliteTable("user_preference", {
 export const family = sqliteTable("family", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
-  type: text("type", { enum: ["FIJO", "VARIABLE", "DISCRECIONAL"] }).notNull(),
+  // En desuso: el tipo ahora es de cada gasto (expense_category.type). Se conserva por compatibilidad.
+  type: text("type", { enum: ["FIJO", "VARIABLE", "DISCRECIONAL"] }).notNull().$defaultFn(() => "VARIABLE"),
   userId: text("user_id"), // null = familia por defecto global
 });
 
@@ -19,6 +20,7 @@ export const expenseCategory = sqliteTable("expense_category", {
   name: text("name").notNull(),
   familyId: text("family_id").notNull().references(() => family.id),
   userId: text("user_id"), // null = gasto por defecto global
+  type: text("type", { enum: ["FIJO", "VARIABLE", "DISCRECIONAL"] }), // clasificación del gasto (null se trata como VARIABLE)
 });
 
 export const expenseMonthlyEntry = sqliteTable(

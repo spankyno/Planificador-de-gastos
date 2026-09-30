@@ -61,14 +61,14 @@ export async function spreadAmount(i: { categoryId: string; year: number; months
   await saveCells(i.months.map((m) => ({ categoryId: i.categoryId, year: i.year, month: m, amount: per })));
 }
 
-export async function createFamily(name: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+export async function createFamily(name: string) {
   const userId = await requireUser();
-  await getDb().insert(family).values({ name, type, userId });
+  await getDb().insert(family).values({ name, userId });
 }
 
-export async function createCategory(name: string, familyId: string) {
+export async function createCategory(name: string, familyId: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
   const userId = await requireUser();
-  await getDb().insert(expenseCategory).values({ name, familyId, userId });
+  await getDb().insert(expenseCategory).values({ name, familyId, userId, type });
 }
 
 /** Datos para informes: importes de varios años en un solo batch. */
@@ -84,9 +84,9 @@ export async function loadReport(years: number[]) {
 }
 
 /** Solo se pueden modificar elementos propios (los globales por defecto quedan intactos). */
-export async function renameFamily(id: string, name: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+export async function renameFamily(id: string, name: string) {
   const userId = await requireUser();
-  await getDb().update(family).set({ name, type }).where(and(eq(family.id, id), eq(family.userId, userId)));
+  await getDb().update(family).set({ name }).where(and(eq(family.id, id), eq(family.userId, userId)));
 }
 
 export async function renameCategory(id: string, name: string) {
@@ -106,4 +106,9 @@ export async function archiveItem(itemType: "family" | "category", itemId: strin
 export async function restoreItem(itemType: "family" | "category", itemId: string) {
   const userId = await requireUser();
   await getDb().delete(itemArchive).where(and(eq(itemArchive.userId, userId), eq(itemArchive.itemType, itemType), eq(itemArchive.itemId, itemId)));
+}
+
+export async function setCategoryType(id: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+  const userId = await requireUser();
+  await getDb().update(expenseCategory).set({ type }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
 }

@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, CalendarRange } from "lucide-react";
 import { saveCells, spreadAmount } from "@/app/actions";
 
 type Fam = { id: string; name: string; type: "FIJO" | "VARIABLE" | "DISCRECIONAL" };
-type Cat = { id: string; name: string; familyId: string };
+type Cat = { id: string; name: string; familyId: string; type?: string | null };
 type Entry = { expenseCategoryId: string; month: number; amount: number };
 
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
@@ -126,7 +126,6 @@ function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread }
         <td className="sticky left-0 bg-slate-100 p-2 font-medium dark:bg-slate-900">
           <button className="flex items-center gap-1" onClick={toggle}>
             {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {f.name}
-            <span className={`ml-2 rounded px-1.5 py-0.5 text-xs ${COLOR[f.type as keyof typeof COLOR]}`}>{f.type}</span>
           </button>
         </td>
         {fam.map((t: number, i: number) => <td key={i} className="p-2 text-right tabular-nums">{fmt(t)}</td>)}
@@ -136,6 +135,7 @@ function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread }
         <tr key={c.id} className="border-t dark:border-slate-800">
           <td className="sticky left-0 bg-white p-2 pl-8 dark:bg-slate-950">
             <span className="mr-2">{c.name}</span>
+            <span className={`mr-2 rounded px-1.5 py-0.5 text-[10px] ${COLOR[(c.type ?? "VARIABLE") as keyof typeof COLOR]}`}>{c.type ?? "VARIABLE"}</span>
             <button aria-label={`Periodificar ${c.name}`} onClick={() => onSpread(c)}><CalendarRange size={14} /></button>
           </td>
           {ALL.map((m) => (

@@ -6,7 +6,7 @@ import { BarChart3, Table2 } from "lucide-react";
 
 type Tipo = "FIJO" | "VARIABLE" | "DISCRECIONAL";
 type Fam = { id: string; name: string; type: Tipo };
-type Cat = { id: string; name: string; familyId: string };
+type Cat = { id: string; name: string; familyId: string; type: Tipo | null };
 type Entry = { expenseCategoryId: string; year: number; month: number; amount: number };
 type Row = { key: string; label: string; sub?: string; color: string; vals: Record<number, number> };
 type Dim = "tipo" | "familia" | "gasto" | "mensual";
@@ -34,13 +34,13 @@ export default function Report({ years, families, categories, entries }: { years
     const famOf = new Map(families.map((f) => [f.id, f]));
     const catOf = new Map(categories.map((c) => [c.id, c]));
     const tipo = new Map<string, Row>(TIPOS.map((t) => [t, { key: t, label: t, color: TIPO_COLOR[t], vals: zero() }]));
-    const fam = new Map<string, Row>(families.map((f, i) => [f.id, { key: f.id, label: f.name, sub: f.type, color: PALETTE[i % PALETTE.length], vals: zero() }]));
-    const cat = new Map<string, Row>(categories.map((c, i) => [c.id, { key: c.id, label: c.name, sub: famOf.get(c.familyId)?.name, color: TIPO_COLOR[famOf.get(c.familyId)?.type ?? "VARIABLE"], vals: zero() }]));
+    const fam = new Map<string, Row>(families.map((f, i) => [f.id, { key: f.id, label: f.name, color: PALETTE[i % PALETTE.length], vals: zero() }]));
+    const cat = new Map<string, Row>(categories.map((c, i) => [c.id, { key: c.id, label: c.name, sub: famOf.get(c.familyId)?.name, color: TIPO_COLOR[c.type ?? "VARIABLE"], vals: zero() }]));
     const mes: Row[] = MESES.map((m, i) => ({ key: String(i), label: m, color: "#64748b", vals: zero() }));
     entries.forEach((e) => {
       const c = catOf.get(e.expenseCategoryId); const f = c && famOf.get(c.familyId);
       if (!c || !f || !(e.year in mes[0].vals)) return;
-      tipo.get(f.type)!.vals[e.year] += e.amount;
+      tipo.get(c.type ?? "VARIABLE")!.vals[e.year] += e.amount;
       fam.get(f.id)!.vals[e.year] += e.amount;
       cat.get(c.id)!.vals[e.year] += e.amount;
       mes[e.month - 1].vals[e.year] += e.amount;
@@ -140,8 +140,10 @@ export default function Report({ years, families, categories, entries }: { years
             <ResponsiveContainer width="100%" height={horizontal ? Math.max(300, rows.length * 26 * years.length + 60) : 300}>
               <BarChart data={data} layout={horizontal ? "vertical" : "horizontal"} margin={{ left: horizontal ? 8 : 0 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                {horizontal ? <><XAxis type="number" tickFormatter={(v) => `${v / 1000}k`} /><YAxis type="category" dataKey="name" width={170} interval={0} tick={{ fontSize: 12 }} /></>
-                  : <><XAxis dataKey="name" /><YAxis tickFormatter={(v) => `${v / 1000}k`} /></>}
+                {horizontal && <XAxis type="number" tickFormatter={(v) => `${v / 1000}k`} />}
+                {horizontal && <YAxis type="category" dataKey="name" width={170} interval={0} tick={{ fontSize: 12 }} />}
+                {!horizontal && <XAxis dataKey="name" />}
+                {!horizontal && <YAxis tickFormatter={(v) => `${v / 1000}k`} />}
                 <Tooltip formatter={(v: number) => eur(v)} />{multi && <Legend />}
                 {years.map((y, i) => <Bar key={y} dataKey={String(y)} fill={YEAR_COLORS[i % 4]} />)}
               </BarChart>
