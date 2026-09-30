@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index, primaryKey } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const userPreference = sqliteTable("user_preference", {
@@ -19,7 +19,6 @@ export const expenseCategory = sqliteTable("expense_category", {
   name: text("name").notNull(),
   familyId: text("family_id").notNull().references(() => family.id),
   userId: text("user_id"), // null = gasto por defecto global
-  archivedFromYear: integer("archived_from_year"), // baja: oculto desde ese año (inclusive)
 });
 
 export const expenseMonthlyEntry = sqliteTable(
@@ -36,4 +35,16 @@ export const expenseMonthlyEntry = sqliteTable(
     uniq: uniqueIndex("uniq_cell").on(t.userId, t.expenseCategoryId, t.year, t.month),
     byYear: index("idx_user_year").on(t.userId, t.year),
   })
+);
+
+// Bajas por usuario: el elemento se oculta desde from_year (inclusive); el historial anterior se conserva.
+export const itemArchive = sqliteTable(
+  "item_archive",
+  {
+    userId: text("user_id").notNull(),
+    itemType: text("item_type", { enum: ["family", "category"] }).notNull(),
+    itemId: text("item_id").notNull(),
+    fromYear: integer("from_year").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.itemType, t.itemId] }) })
 );
