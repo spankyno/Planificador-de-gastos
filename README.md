@@ -29,7 +29,7 @@ Planificador de gastos anuales: una grilla de gastos por meses, agrupados en fam
 └── package.json
 ```
 
-## Puesta en marcha local
+## Puesta en marcha local 
 
 ```bash
 npm install
