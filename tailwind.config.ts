@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss";
 export default {
   content: ["./src/**/*.{ts,tsx}"],
-  darkMode: "media", // sigue el tema del sistema
+  darkMode: "class", // controlado por el selector de tema (por defecto sigue al sistema)
   theme: { extend: {} },
   plugins: [],
 } satisfies Config;
