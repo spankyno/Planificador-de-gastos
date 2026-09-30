@@ -19,6 +19,7 @@ export const expenseCategory = sqliteTable("expense_category", {
   name: text("name").notNull(),
   familyId: text("family_id").notNull().references(() => family.id),
   userId: text("user_id"), // null = gasto por defecto global
+  archivedFromYear: integer("archived_from_year"),
 });
 
 export const expenseMonthlyEntry = sqliteTable(
