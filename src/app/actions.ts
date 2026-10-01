@@ -2,7 +2,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { expenseMonthlyEntry, expenseCategory, family, itemArchive } from "@/db/schema";
+import { expenseMonthlyEntry, expenseCategory, family, itemArchive, userPreference } from "@/db/schema";
 
 async function requireUser() {
   const { userId } = await auth();
@@ -14,17 +14,18 @@ async function requireUser() {
 export async function loadYear(year: number) {
   const userId = await requireUser();
   const db = getDb();
-  const [fams, cats, entries, archives] = await db.batch([
+  const [fams, cats, entries, archives, prefs] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year))),
     db.select().from(itemArchive).where(eq(itemArchive.userId, userId)),
+    db.select().from(userPreference).where(eq(userPreference.userId, userId)),
   ]);
   const gone = (type: string, id: string) => archives.some((a) => a.itemType === type && a.itemId === id && a.fromYear <= year);
   const families = fams.filter((f) => !gone("family", f.id));
   const ok = new Set(families.map((f) => f.id));
   const categories = cats.filter((c) => ok.has(c.familyId) && !gone("category", c.id));
-  return { families, categories, entries };
+  return { families, categories, entries, currency: prefs[0]?.currency ?? "EUR" };
 }
 
 /** Estructura completa (incluye bajas) para la pantalla de gestión. */
@@ -75,12 +76,13 @@ export async function createCategory(name: string, familyId: string, type: "FIJO
 export async function loadReport(years: number[]) {
   const userId = await requireUser();
   const db = getDb();
-  const [families, categories, entries] = await db.batch([
+  const [families, categories, entries, prefs] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), inArray(expenseMonthlyEntry.year, years))),
+    db.select().from(userPreference).where(eq(userPreference.userId, userId)),
   ]);
-  return { families, categories, entries };
+  return { families, categories, entries, currency: prefs[0]?.currency ?? "EUR" };
 }
 
 /** Solo se pueden modificar elementos propios (los globales por defecto quedan intactos). */
@@ -111,4 +113,23 @@ export async function restoreItem(itemType: "family" | "category", itemId: strin
 export async function setCategoryType(id: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
   const userId = await requireUser();
   await getDb().update(expenseCategory).set({ type }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
+}
+
+const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "MXN", "ARS", "COP", "CLP", "PEN", "BRL"] as const;
+
+/** Moneda del usuario (EUR por defecto). No lanza error si no hay sesión. */
+export async function getCurrency(): Promise<string> {
+  const { userId } = await auth();
+  if (!userId) return "EUR";
+  const rows = await getDb().select().from(userPreference).where(eq(userPreference.userId, userId));
+  return rows[0]?.currency ?? "EUR";
+}
+
+export async function setCurrency(currency: string) {
+  const userId = await requireUser();
+  if (!(CURRENCIES as readonly string[]).includes(currency)) throw new Error("Moneda no admitida");
+  await getDb().insert(userPreference).values({ userId, currency }).onConflictDoUpdate({
+    target: userPreference.userId,
+    set: { currency },
+  });
 }

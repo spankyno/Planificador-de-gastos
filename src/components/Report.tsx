@@ -20,11 +20,12 @@ const DIMS: { id: Dim; label: string }[] = [
   { id: "tipo", label: "Por tipo" }, { id: "familia", label: "Por familia" },
   { id: "gasto", label: "Por gasto" }, { id: "mensual", label: "Mensual" },
 ];
-const eur = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0 });
 const seg = (on: boolean) => `inline-flex items-center gap-1 px-3 py-1 text-sm ${on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "hover:bg-slate-100 dark:hover:bg-slate-800"}`;
 
-export default function Report({ years, families, categories, entries }: { years: number[]; families: Fam[]; categories: Cat[]; entries: Entry[] }) {
+export default function Report({ years, families, categories, entries, currency }: { years: number[]; families: Fam[]; categories: Cat[]; entries: Entry[]; currency: string }) {
   const router = useRouter();
+  const eur = (n: number) => money(n, currency);
   const [dim, setDim] = useState<Dim>("tipo");
   const [view, setView] = useState<"tabla" | "grafico">("tabla");
   const [famSel, setFamSel] = useState<string | null>(null); // familia abierta en el desglose

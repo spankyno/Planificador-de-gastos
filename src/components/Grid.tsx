@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, CalendarRange } from "lucide-react";
+import { ChevronDown, ChevronRight, CalendarRange, Download } from "lucide-react";
 import { saveCells, spreadAmount } from "@/app/actions";
 
 type Fam = { id: string; name: string; type: "FIJO" | "VARIABLE" | "DISCRECIONAL" };
@@ -15,10 +15,11 @@ const COLOR = {
   VARIABLE: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   DISCRECIONAL: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
 } as const;
-const fmt = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0 });
 
-export default function Grid({ year, families, categories, entries }: { year: number; families: Fam[]; categories: Cat[]; entries: Entry[] }) {
+export default function Grid({ year, families, categories, entries, currency }: { year: number; families: Fam[]; categories: Cat[]; entries: Entry[]; currency: string }) {
   const router = useRouter();
+  const fmt = (n: number) => money(n, currency);
   const [, start] = useTransition();
   const [cells, setCells] = useState<Record<string, number>>(() =>
     Object.fromEntries(entries.map((e) => [`${e.expenseCategoryId}|${e.month}`, e.amount]))
@@ -36,6 +37,19 @@ export default function Grid({ year, families, categories, entries }: { year: nu
     const perMonth = ALL.map((m) => categories.reduce((s, c) => s + get(c.id, m), 0));
     return { perMonth, year: perMonth.reduce((a, b) => a + b, 0) };
   }, [cells, categories]);
+
+  function exportCsv() {
+    const num = (n: number) => n.toFixed(2).replace(".", ",");
+    const head = ["Familia", "Gasto", "Tipo", ...MESES, "Total"];
+    const body = families.flatMap((f) => categories.filter((c) => c.familyId === f.id).map((c) =>
+      [f.name, c.name, c.type ?? "VARIABLE", ...ALL.map((m) => num(get(c.id, m))), num(rowTotal(c.id))]));
+    body.push(["Total", "", "", ...totals.perMonth.map(num), num(totals.year)]);
+    const csv = "\uFEFF" + [head, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `cuadrante-${year}.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  }
 
   function commit(catId: string, month: number, raw: string) {
     const amount = Math.max(0, parseFloat(raw.replace(",", ".")) || 0);
@@ -62,6 +76,7 @@ export default function Grid({ year, families, categories, entries }: { year: nu
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">Spending Planner {year}</h1>
         <div className="flex gap-2">
+          <button className="inline-flex items-center gap-1 rounded border px-3 py-1" onClick={exportCsv}><Download size={14} /> CSV</button>
           <button className="rounded border px-3 py-1" onClick={() => router.push(`/?y=${year - 1}`)}>{year - 1}</button>
           <button className="rounded border px-3 py-1" onClick={() => router.push(`/?y=${year + 1}`)}>{year + 1}</button>
         </div>
@@ -80,7 +95,7 @@ export default function Grid({ year, families, categories, entries }: { year: nu
             {families.map((f) => (
               <FamilyRows key={f.id} f={f} cats={categories.filter((c) => c.familyId === f.id)}
                 isOpen={open[f.id] ?? true} toggle={() => setOpen((o) => ({ ...o, [f.id]: !(o[f.id] ?? true) }))}
-                get={get} rowTotal={rowTotal} commit={commit} onSpread={(c: Cat) => { setSpread(c); setSAmount(0); setSMonths(ALL); }} />
+                get={get} rowTotal={rowTotal} commit={commit} fmt={fmt} onSpread={(c: Cat) => { setSpread(c); setSAmount(0); setSMonths(ALL); }} />
             ))}
           </tbody>
           <tfoot className="border-t-2 font-semibold dark:border-slate-700">
@@ -118,7 +133,7 @@ export default function Grid({ year, families, categories, entries }: { year: nu
   );
 }
 
-function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread }: any) {
+function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, fmt }: any) {
   const fam = ALL.map((m) => cats.reduce((s: number, c: Cat) => s + get(c.id, m), 0));
   return (
     <>
