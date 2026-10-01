@@ -20,7 +20,7 @@ const DIMS: { id: Dim; label: string }[] = [
   { id: "tipo", label: "Por tipo" }, { id: "familia", label: "Por familia" },
   { id: "gasto", label: "Por gasto" }, { id: "mensual", label: "Mensual" },
 ];
-const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0 });
+const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0, useGrouping: "always" });
 const seg = (on: boolean) => `inline-flex items-center gap-1 px-3 py-1 text-sm ${on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : "hover:bg-slate-100 dark:hover:bg-slate-800"}`;
 
 export default function Report({ years, families, categories, entries, currency }: { years: number[]; families: Fam[]; categories: Cat[]; entries: Entry[]; currency: string }) {
@@ -126,9 +126,9 @@ export default function Report({ years, families, categories, entries, currency 
       {rows.every((r) => years.every((y) => r.vals[y] === 0)) ? (
         <p className="rounded border p-8 text-center text-sm text-slate-500 dark:border-slate-800">No hay importes en los años seleccionados.</p>
       ) : view === "tabla" ? (
-        <div className="overflow-x-auto rounded-lg border dark:border-slate-800">
+        <div className="max-h-[calc(100vh-14rem)] overflow-auto rounded-lg border dark:border-slate-800">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
               <tr className="text-right">
                 <th className="p-3 text-left">{dimLabel}</th>
                 {years.map((y) => <th key={y} className="p-3">{y}</th>)}

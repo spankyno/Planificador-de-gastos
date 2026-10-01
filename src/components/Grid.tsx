@@ -15,7 +15,18 @@ const COLOR = {
   VARIABLE: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   DISCRECIONAL: "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300",
 } as const;
-const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0 });
+const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0, useGrouping: "always" });
+
+// Formato de las celdas: con separador de miles al mostrar, número "plano" al editar
+const fmtNum = (n: number) => (n === 0 ? "" : n.toLocaleString("es-ES", { useGrouping: "always", maximumFractionDigits: 2 }));
+const rawNum = (n: number) => (n === 0 ? "" : String(n).replace(".", ","));
+// Acepta "1200", "1200,5", "1.200,50" y "1.200"
+const parseAmount = (raw: string) => {
+  let t = raw.replace(/[\s€$£]/g, "");
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  return Math.max(0, parseFloat(t) || 0);
+};
 
 export default function Grid({ year, families, categories, entries, currency }: { year: number; families: Fam[]; categories: Cat[]; entries: Entry[]; currency: string }) {
   const router = useRouter();
@@ -52,7 +63,7 @@ export default function Grid({ year, families, categories, entries, currency }: 
   }
 
   function commit(catId: string, month: number, raw: string) {
-    const amount = Math.max(0, parseFloat(raw.replace(",", ".")) || 0);
+    const amount = parseAmount(raw);
     if (amount === get(catId, month)) return;
     const key = `${catId}|${month}`, prev = cells[key] ?? 0;
     setCells((s) => ({ ...s, [key]: amount })); // actualización optimista
@@ -74,7 +85,7 @@ export default function Grid({ year, families, categories, entries, currency }: 
   return (
     <main className="min-h-screen bg-white p-4 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Spending Planner {year}</h1>
+        <h1 className="text-xl font-semibold">Cuadrante {year}</h1>
         <div className="flex gap-2">
           <button className="inline-flex items-center gap-1 rounded border px-3 py-1" onClick={exportCsv}><Download size={14} /> CSV</button>
           <button className="rounded border px-3 py-1" onClick={() => router.push(`/?y=${year - 1}`)}>{year - 1}</button>
@@ -82,13 +93,13 @@ export default function Grid({ year, families, categories, entries, currency }: 
         </div>
       </header>
 
-      <div className="overflow-x-auto scroll-smooth rounded-lg border dark:border-slate-800">
+      <div className="max-h-[calc(100vh-11rem)] overflow-auto scroll-smooth rounded-lg border dark:border-slate-800">
         <table className="w-full min-w-[1100px] text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-900">
+          <thead>
             <tr>
-              <th className="sticky left-0 z-10 bg-slate-50 p-2 text-left dark:bg-slate-900">Gasto</th>
-              {MESES.map((m) => <th key={m} className="p-2 text-right">{m}</th>)}
-              <th className="p-2 text-right">Total anual</th>
+              <th className="sticky left-0 top-0 z-20 bg-slate-50 p-2 text-left dark:bg-slate-900">Gasto</th>
+              {MESES.map((m) => <th key={m} className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900">{m}</th>)}
+              <th className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900">Total anual</th>
             </tr>
           </thead>
           <tbody>
@@ -100,9 +111,9 @@ export default function Grid({ year, families, categories, entries, currency }: 
           </tbody>
           <tfoot className="border-t-2 font-semibold dark:border-slate-700">
             <tr>
-              <td className="sticky left-0 bg-white p-2 dark:bg-slate-950">Total mensual</td>
-              {totals.perMonth.map((t, i) => <td key={i} className="p-2 text-right tabular-nums">{fmt(t)}</td>)}
-              <td className="p-2 text-right tabular-nums">{fmt(totals.year)}</td>
+              <td className="sticky bottom-0 left-0 z-10 bg-white p-2 dark:bg-slate-950">Total mensual</td>
+              {totals.perMonth.map((t, i) => <td key={i} className="sticky bottom-0 bg-white p-2 text-right tabular-nums dark:bg-slate-950">{fmt(t)}</td>)}
+              <td className="sticky bottom-0 bg-white p-2 text-right tabular-nums dark:bg-slate-950">{fmt(totals.year)}</td>
             </tr>
           </tfoot>
         </table>
@@ -155,8 +166,9 @@ function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, 
           </td>
           {ALL.map((m) => (
             <td key={m} className="p-0">
-              <input inputMode="decimal" defaultValue={get(c.id, m) || ""} key={get(c.id, m)}
-                onBlur={(e) => commit(c.id, m, e.target.value)}
+              <input inputMode="decimal" defaultValue={fmtNum(get(c.id, m))} key={get(c.id, m)}
+                onFocus={(e) => { e.target.value = rawNum(get(c.id, m)); e.target.select(); }}
+                onBlur={(e) => { const v = parseAmount(e.target.value); commit(c.id, m, e.target.value); e.target.value = fmtNum(v); }}
                 className="w-full bg-transparent p-2 text-right tabular-nums focus:bg-yellow-50 focus:outline-none dark:focus:bg-slate-800" />
             </td>
           ))}
