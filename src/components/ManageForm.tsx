@@ -103,9 +103,9 @@ export default function ManageForm({ families, categories, archives }: { familie
           onClick={() => { setAdding("family"); setDraft(""); setDraftType("VARIABLE"); }}><Plus size={14} /> Nueva familia</button>
       </header>
 
-      <div className="max-h-[calc(100vh-13rem)] overflow-auto rounded-lg border dark:border-slate-800">
+      <div className="max-h-[calc(100vh-13rem)] overflow-auto rounded-lg border dark:border-slate-800 lg:max-h-none lg:overflow-visible">
         <table className="w-full min-w-[720px] text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900">
+          <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 lg:top-[3.4rem]">
             <tr><th className="p-3">Nombre</th><th className="p-3">Tipo</th><th className="p-3">Estado</th><th className="p-3 text-right">Acciones</th></tr>
           </thead>
           {adding === "family" && (

@@ -126,9 +126,9 @@ export default function Report({ years, families, categories, entries, currency 
       {rows.every((r) => years.every((y) => r.vals[y] === 0)) ? (
         <p className="rounded border p-8 text-center text-sm text-slate-500 dark:border-slate-800">No hay importes en los años seleccionados.</p>
       ) : view === "tabla" ? (
-        <div className="max-h-[calc(100vh-14rem)] overflow-auto rounded-lg border dark:border-slate-800">
+        <div className="max-h-[calc(100vh-14rem)] overflow-auto rounded-lg border dark:border-slate-800 lg:max-h-none lg:overflow-visible">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 dark:bg-slate-900 lg:top-[3.4rem]">
               <tr className="text-right">
                 <th className="p-3 text-left">{dimLabel}</th>
                 {years.map((y) => <th key={y} className="p-3">{y}</th>)}

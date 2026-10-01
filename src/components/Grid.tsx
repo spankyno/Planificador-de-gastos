@@ -93,13 +93,13 @@ export default function Grid({ year, families, categories, entries, currency }: 
         </div>
       </header>
 
-      <div className="max-h-[calc(100vh-11rem)] overflow-auto scroll-smooth rounded-lg border dark:border-slate-800">
+      <div className="max-h-[calc(100vh-11rem)] overflow-auto scroll-smooth rounded-lg border dark:border-slate-800 xl:max-h-none xl:overflow-visible">
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-20 bg-slate-50 p-2 text-left dark:bg-slate-900">Gasto</th>
-              {MESES.map((m) => <th key={m} className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900">{m}</th>)}
-              <th className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900">Total anual</th>
+              <th className="sticky left-0 top-0 z-20 bg-slate-50 p-2 text-left dark:bg-slate-900 xl:top-[3.4rem]">Gasto</th>
+              {MESES.map((m) => <th key={m} className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900 xl:top-[3.4rem]">{m}</th>)}
+              <th className="sticky top-0 z-10 bg-slate-50 p-2 text-right dark:bg-slate-900 xl:top-[3.4rem]">Total anual</th>
             </tr>
           </thead>
           <tbody>

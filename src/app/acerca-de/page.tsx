@@ -28,6 +28,13 @@ export default function AboutPage() {
           </p>
         </header>
 
+        <figure>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={SITE.ogImage.url} alt="Planificador de Gastos - Spending Planner: cuadrante anual, informes y comparativa entre años"
+            width={SITE.ogImage.width} height={SITE.ogImage.height} loading="lazy"
+            className="h-auto w-full rounded-2xl border border-slate-200 shadow-lg dark:border-slate-800" />
+        </figure>
+
         <section aria-labelledby="caracteristicas">
           <h2 id="caracteristicas" className="text-xl font-bold">Características</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-slate-700 dark:text-slate-300">
