@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.0.0",
-    "drizzle-orm": "^0.36.0",
+    "drizzle-orm": "0.45.3",
     "lucide-react": "^0.400.0",
-    "next": "15.3.9",
+    "next": "15.5.2",
     "react": "19.1.4",
     "react-dom": "19.1.4",
     "recharts": "^2.13.0"
