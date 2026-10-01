@@ -14,7 +14,7 @@ export default function ThemeToggle() {
   };
 
   return (
-    <button aria-label="Cambiar entre tema claro y oscuro" onClick={toggle} className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+    <button aria-label="Cambiar entre tema claro y oscuro" onClick={toggle} className="rounded p-1 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
       {dark ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   );

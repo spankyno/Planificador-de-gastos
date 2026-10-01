@@ -1,6 +1,7 @@
 import { loadReport } from "../actions";
 import Report from "@/components/Report";
 export const runtime = "edge";
+export const metadata = { title: "Informes", robots: { index: false, follow: false } };
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ y?: string }> }) {
   const now = new Date().getFullYear();

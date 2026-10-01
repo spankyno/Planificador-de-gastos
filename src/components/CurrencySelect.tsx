@@ -11,7 +11,7 @@ export default function CurrencySelect({ current }: { current: string }) {
   return (
     <select aria-label="Moneda" disabled={pending} value={current}
       onChange={(e) => start(async () => { await setCurrency(e.target.value); router.refresh(); })}
-      className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs dark:border-slate-700 dark:bg-slate-900">
+      className="rounded border border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
       {OPCIONES.map((c) => <option key={c}>{c}</option>)}
     </select>
   );
