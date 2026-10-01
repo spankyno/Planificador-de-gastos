@@ -4,15 +4,59 @@ import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { expenseMonthlyEntry, expenseCategory, family, itemArchive, userPreference } from "@/db/schema";
 
+// Cada función exportada de este archivo es un endpoint público: se autentica, se valida la entrada
+// en tiempo de ejecución (los tipos de TypeScript no protegen frente a peticiones manipuladas) y se
+// comprueba que los identificadores pertenecen al usuario o son globales.
+
+type Tipo = "FIJO" | "VARIABLE" | "DISCRECIONAL";
+const TIPOS: readonly Tipo[] = ["FIJO", "VARIABLE", "DISCRECIONAL"];
+const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "MXN", "ARS", "COP", "CLP", "PEN", "BRL"] as const;
+
+// Límites (D1 admite como máximo 100 parámetros por consulta; las cuotas frenan abusos de almacenamiento)
+const MAX_NAME = 80;
+const MAX_AMOUNT = 1_000_000_000;
+const MAX_CELLS = 60;
+const MAX_YEARS = 10;
+const MAX_FAMILIES = 100;
+const MAX_CATEGORIES = 1000;
+
+function fail(message: string): never { throw new Error(message); }
+const asYear = (v: unknown): number => (typeof v === "number" && Number.isInteger(v) && v >= 1990 && v <= 2100 ? v : fail("Año no válido"));
+const asMonth = (v: unknown): number => (typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 12 ? v : fail("Mes no válido"));
+const asAmount = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= MAX_AMOUNT ? Math.round(v * 100) / 100 : fail("Importe no válido"));
+const asId = (v: unknown): string => (typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : fail("Identificador no válido"));
+const asTipo = (v: unknown): Tipo => (TIPOS.includes(v as Tipo) ? (v as Tipo) : fail("Tipo no válido"));
+const asItemType = (v: unknown): "family" | "category" => (v === "family" || v === "category" ? v : fail("Elemento no válido"));
+function asName(v: unknown): string {
+  if (typeof v !== "string") fail("Nombre no válido");
+  const t = v.trim().replace(/\s+/g, " ");
+  return t && t.length <= MAX_NAME ? t : fail("Nombre no válido");
+}
+
 async function requireUser() {
   const { userId } = await auth();
   if (!userId) throw new Error("No autenticado");
   return userId;
 }
 
+/** Comprueba que todos los gastos existen y son globales o del usuario. */
+async function assertVisibleCategories(userId: string, ids: string[]) {
+  const unique = [...new Set(ids)];
+  const rows = await getDb().select({ id: expenseCategory.id }).from(expenseCategory)
+    .where(and(inArray(expenseCategory.id, unique), or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))));
+  if (rows.length !== unique.length) fail("Gasto no válido");
+}
+
+async function assertVisibleFamily(userId: string, id: string) {
+  const rows = await getDb().select({ id: family.id }).from(family)
+    .where(and(eq(family.id, id), or(isNull(family.userId), eq(family.userId, userId))));
+  if (rows.length !== 1) fail("Familia no válida");
+}
+
 /** Familias, gastos e importes del año. Oculta lo dado de baja desde ese año (o antes). */
-export async function loadYear(year: number) {
+export async function loadYear(yearInput: number) {
   const userId = await requireUser();
+  const year = asYear(yearInput);
   const db = getDb();
   const [fams, cats, entries, archives, prefs] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
@@ -41,9 +85,11 @@ export async function loadStructure() {
 }
 
 /** Upsert de una o varias celdas en un único db.batch (una sola ida a D1). */
-export async function saveCells(cells: { categoryId: string; year: number; month: number; amount: number }[]) {
+export async function saveCells(cellsInput: { categoryId: string; year: number; month: number; amount: number }[]) {
   const userId = await requireUser();
-  if (!cells.length) return;
+  if (!Array.isArray(cellsInput) || cellsInput.length === 0 || cellsInput.length > MAX_CELLS) fail("Datos no válidos");
+  const cells = cellsInput.map((c) => ({ categoryId: asId(c?.categoryId), year: asYear(c?.year), month: asMonth(c?.month), amount: asAmount(c?.amount) }));
+  await assertVisibleCategories(userId, cells.map((c) => c.categoryId));
   const db = getDb();
   const stmts = cells.map((c) =>
     db.insert(expenseMonthlyEntry)
@@ -58,23 +104,38 @@ export async function saveCells(cells: { categoryId: string; year: number; month
 
 /** Periodificación: "repeat" replica el importe; "split" lo prorratea entre los meses. */
 export async function spreadAmount(i: { categoryId: string; year: number; months: number[]; amount: number; mode: "repeat" | "split" }) {
-  const per = i.mode === "split" ? Math.round((i.amount / i.months.length) * 100) / 100 : i.amount;
-  await saveCells(i.months.map((m) => ({ categoryId: i.categoryId, year: i.year, month: m, amount: per })));
+  if (!Array.isArray(i?.months) || i.months.length === 0 || i.months.length > 12) fail("Meses no válidos");
+  const months = [...new Set(i.months.map(asMonth))];
+  if (i.mode !== "repeat" && i.mode !== "split") fail("Modo no válido");
+  const amount = asAmount(i.amount);
+  const per = i.mode === "split" ? Math.round((amount / months.length) * 100) / 100 : amount;
+  await saveCells(months.map((m) => ({ categoryId: i.categoryId, year: i.year, month: m, amount: per })));
 }
 
-export async function createFamily(name: string) {
+export async function createFamily(nameInput: string) {
   const userId = await requireUser();
-  await getDb().insert(family).values({ name, userId });
+  const name = asName(nameInput);
+  const db = getDb();
+  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(family).where(eq(family.userId, userId));
+  if (n >= MAX_FAMILIES) fail("Has alcanzado el máximo de familias");
+  await db.insert(family).values({ name, userId });
 }
 
-export async function createCategory(name: string, familyId: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+export async function createCategory(nameInput: string, familyIdInput: string, typeInput: Tipo) {
   const userId = await requireUser();
-  await getDb().insert(expenseCategory).values({ name, familyId, userId, type });
+  const name = asName(nameInput), familyId = asId(familyIdInput), type = asTipo(typeInput);
+  await assertVisibleFamily(userId, familyId);
+  const db = getDb();
+  const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(expenseCategory).where(eq(expenseCategory.userId, userId));
+  if (n >= MAX_CATEGORIES) fail("Has alcanzado el máximo de gastos");
+  await db.insert(expenseCategory).values({ name, familyId, userId, type });
 }
 
 /** Datos para informes: importes de varios años en un solo batch. */
-export async function loadReport(years: number[]) {
+export async function loadReport(yearsInput: number[]) {
   const userId = await requireUser();
+  if (!Array.isArray(yearsInput) || yearsInput.length === 0 || yearsInput.length > MAX_YEARS) fail("Años no válidos");
+  const years = [...new Set(yearsInput.map(asYear))];
   const db = getDb();
   const [families, categories, entries, prefs] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
@@ -86,36 +147,41 @@ export async function loadReport(years: number[]) {
 }
 
 /** Solo se pueden modificar elementos propios (los globales por defecto quedan intactos). */
-export async function renameFamily(id: string, name: string) {
+export async function renameFamily(idInput: string, nameInput: string) {
   const userId = await requireUser();
+  const id = asId(idInput), name = asName(nameInput);
   await getDb().update(family).set({ name }).where(and(eq(family.id, id), eq(family.userId, userId)));
 }
 
-export async function renameCategory(id: string, name: string) {
+export async function renameCategory(idInput: string, nameInput: string) {
   const userId = await requireUser();
+  const id = asId(idInput), name = asName(nameInput);
   await getDb().update(expenseCategory).set({ name }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
 }
 
 /** Baja desde un año, para elementos propios o por defecto (solo afecta a este usuario). */
-export async function archiveItem(itemType: "family" | "category", itemId: string, fromYear: number) {
+export async function archiveItem(itemTypeInput: "family" | "category", itemIdInput: string, fromYearInput: number) {
   const userId = await requireUser();
+  const itemType = asItemType(itemTypeInput), itemId = asId(itemIdInput), fromYear = asYear(fromYearInput);
+  if (itemType === "family") await assertVisibleFamily(userId, itemId);
+  else await assertVisibleCategories(userId, [itemId]);
   await getDb().insert(itemArchive).values({ userId, itemType, itemId, fromYear }).onConflictDoUpdate({
     target: [itemArchive.userId, itemArchive.itemType, itemArchive.itemId],
     set: { fromYear: sql`excluded.from_year` },
   });
 }
 
-export async function restoreItem(itemType: "family" | "category", itemId: string) {
+export async function restoreItem(itemTypeInput: "family" | "category", itemIdInput: string) {
   const userId = await requireUser();
+  const itemType = asItemType(itemTypeInput), itemId = asId(itemIdInput);
   await getDb().delete(itemArchive).where(and(eq(itemArchive.userId, userId), eq(itemArchive.itemType, itemType), eq(itemArchive.itemId, itemId)));
 }
 
-export async function setCategoryType(id: string, type: "FIJO" | "VARIABLE" | "DISCRECIONAL") {
+export async function setCategoryType(idInput: string, typeInput: Tipo) {
   const userId = await requireUser();
+  const id = asId(idInput), type = asTipo(typeInput);
   await getDb().update(expenseCategory).set({ type }).where(and(eq(expenseCategory.id, id), eq(expenseCategory.userId, userId)));
 }
-
-const CURRENCIES = ["EUR", "USD", "GBP", "CHF", "MXN", "ARS", "COP", "CLP", "PEN", "BRL"] as const;
 
 /** Moneda del usuario (EUR por defecto). No lanza error si no hay sesión. */
 export async function getCurrency(): Promise<string> {
@@ -127,7 +193,7 @@ export async function getCurrency(): Promise<string> {
 
 export async function setCurrency(currency: string) {
   const userId = await requireUser();
-  if (!(CURRENCIES as readonly string[]).includes(currency)) throw new Error("Moneda no admitida");
+  if (typeof currency !== "string" || !(CURRENCIES as readonly string[]).includes(currency)) fail("Moneda no admitida");
   await getDb().insert(userPreference).values({ userId, currency }).onConflictDoUpdate({
     target: userPreference.userId,
     set: { currency },

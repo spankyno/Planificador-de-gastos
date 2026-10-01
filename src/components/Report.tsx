@@ -11,6 +11,8 @@ type Entry = { expenseCategoryId: string; year: number; month: number; amount: n
 type Row = { key: string; label: string; sub?: string; color: string; famId?: string; vals: Record<number, number> };
 type Dim = "tipo" | "familia" | "gasto" | "mensual";
 
+// Evita la inyección de fórmulas al abrir el CSV en Excel/Calc (=, +, -, @ al inicio de una etiqueta)
+const safe = (s: string) => (/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const TIPOS: Tipo[] = ["FIJO", "VARIABLE", "DISCRECIONAL"];
 const TIPO_COLOR: Record<Tipo, string> = { FIJO: "#2563eb", VARIABLE: "#f97316", DISCRECIONAL: "#9333ea" };
@@ -81,7 +83,7 @@ export default function Report({ years, families, categories, entries, currency 
     const head = [dimLabel, ...years, ...(multi ? ["Variación", "%"] : [])];
     const line = (label: string, v: (y: number) => number) => [label, ...years.map((y) => num(v(y))),
       ...(multi ? [num(v(last) - v(years[0])), pct(v(years[0]), v(last))] : [])];
-    const body = [...rows.map((r) => line(r.sub ? `${r.label} (${r.sub})` : r.label, (y) => r.vals[y])), line("Total", tot)];
+    const body = [...rows.map((r) => line(safe(r.sub ? `${r.label} (${r.sub})` : r.label), (y) => r.vals[y])), line("Total", tot)];
     const csv = "\uFEFF" + [head, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));

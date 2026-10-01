@@ -8,6 +8,8 @@ type Fam = { id: string; name: string; type: "FIJO" | "VARIABLE" | "DISCRECIONAL
 type Cat = { id: string; name: string; familyId: string; type?: string | null };
 type Entry = { expenseCategoryId: string; month: number; amount: number };
 
+// Evita la inyección de fórmulas al abrir el CSV en Excel/Calc (=, +, -, @ al inicio de una etiqueta)
+const safe = (s: string) => (/^[=+\-@\t\r]/.test(s) ? `'${s}` : s);
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const ALL = MESES.map((_, i) => i + 1);
 const COLOR = {
@@ -18,11 +20,12 @@ const COLOR = {
 const money = (n: number, currency: string) => n.toLocaleString("es-ES", { style: "currency", currency, maximumFractionDigits: 0, useGrouping: "always" });
 
 // Formato de las celdas: con separador de miles al mostrar, número "plano" al editar
-const fmtNum = (n: number) => (n === 0 ? "" : n.toLocaleString("es-ES", { useGrouping: "always", maximumFractionDigits: 2 }));
+const moneyCell = (n: number, currency: string) =>
+  n === 0 ? "" : n.toLocaleString("es-ES", { style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 2, useGrouping: "always" });
 const rawNum = (n: number) => (n === 0 ? "" : String(n).replace(".", ","));
 // Acepta "1200", "1200,5", "1.200,50" y "1.200"
 const parseAmount = (raw: string) => {
-  let t = raw.replace(/[\s€$£]/g, "");
+  let t = raw.replace(/[^\d.,-]/g, ""); // ignora símbolos de moneda, espacios y letras
   if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
   else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
   return Math.max(0, parseFloat(t) || 0);
@@ -53,7 +56,7 @@ export default function Grid({ year, families, categories, entries, currency }: 
     const num = (n: number) => n.toFixed(2).replace(".", ",");
     const head = ["Familia", "Gasto", "Tipo", ...MESES, "Total"];
     const body = families.flatMap((f) => categories.filter((c) => c.familyId === f.id).map((c) =>
-      [f.name, c.name, c.type ?? "VARIABLE", ...ALL.map((m) => num(get(c.id, m))), num(rowTotal(c.id))]));
+      [safe(f.name), safe(c.name), c.type ?? "VARIABLE", ...ALL.map((m) => num(get(c.id, m))), num(rowTotal(c.id))]));
     body.push(["Total", "", "", ...totals.perMonth.map(num), num(totals.year)]);
     const csv = "\uFEFF" + [head, ...body].map((l) => l.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
     const a = document.createElement("a");
@@ -106,7 +109,7 @@ export default function Grid({ year, families, categories, entries, currency }: 
             {families.map((f) => (
               <FamilyRows key={f.id} f={f} cats={categories.filter((c) => c.familyId === f.id)}
                 isOpen={open[f.id] ?? true} toggle={() => setOpen((o) => ({ ...o, [f.id]: !(o[f.id] ?? true) }))}
-                get={get} rowTotal={rowTotal} commit={commit} fmt={fmt} onSpread={(c: Cat) => { setSpread(c); setSAmount(0); setSMonths(ALL); }} />
+                get={get} rowTotal={rowTotal} commit={commit} fmt={fmt} fmtCell={(n: number) => moneyCell(n, currency)} onSpread={(c: Cat) => { setSpread(c); setSAmount(0); setSMonths(ALL); }} />
             ))}
           </tbody>
           <tfoot className="border-t-2 font-semibold dark:border-slate-700">
@@ -144,7 +147,7 @@ export default function Grid({ year, families, categories, entries, currency }: 
   );
 }
 
-function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, fmt }: any) {
+function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, fmt, fmtCell }: any) {
   const fam = ALL.map((m) => cats.reduce((s: number, c: Cat) => s + get(c.id, m), 0));
   return (
     <>
@@ -166,9 +169,9 @@ function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, 
           </td>
           {ALL.map((m) => (
             <td key={m} className="p-0">
-              <input inputMode="decimal" defaultValue={fmtNum(get(c.id, m))} key={get(c.id, m)}
+              <input inputMode="decimal" defaultValue={fmtCell(get(c.id, m))} key={get(c.id, m)}
                 onFocus={(e) => { e.target.value = rawNum(get(c.id, m)); e.target.select(); }}
-                onBlur={(e) => { const v = parseAmount(e.target.value); commit(c.id, m, e.target.value); e.target.value = fmtNum(v); }}
+                onBlur={(e) => { const v = parseAmount(e.target.value); commit(c.id, m, e.target.value); e.target.value = fmtCell(v); }}
                 className="w-full bg-transparent p-2 text-right tabular-nums focus:bg-yellow-50 focus:outline-none dark:focus:bg-slate-800" />
             </td>
           ))}
