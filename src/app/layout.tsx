@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { ClerkProvider, SignedIn } from "@clerk/nextjs";
-import Nav from "@/components/Nav";
+import { ClerkProvider } from "@clerk/nextjs";
 import Footer from "@/components/Footer";
 import { JSON_LD, SITE } from "@/lib/site";
 import "./globals.css";
@@ -51,7 +50,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <head><script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} /></head>
         <body className="flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
           <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />
-          <SignedIn><Nav /></SignedIn>
           <div className="flex-1">{children}</div>
           <Footer />
           {/* Script de Aitor's Analytics Next js */}
