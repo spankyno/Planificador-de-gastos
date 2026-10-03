@@ -60,3 +60,4 @@ npm run dev
 - Los importes se guardan por usuario, gasto, año y mes; el índice único `uniq_cell` permite el upsert por celda.
 - Los elementos con `user_id` nulo son globales (los ve todo el mundo); los propios solo los ve su autor. Las bajas son por usuario (`item_archive`), también para los elementos por defecto.
 - El tipo de gasto vive en `expense_category.type`. La columna `family.type` está en desuso.
+- **Versión de Next.js fijada en 15.4.11.** Con `@cloudflare/next-on-pages` 1.13.x, la 15.5.x rompe las acciones del servidor (Clerk deja de detectar el middleware y devuelve error 500 al guardar). No subas de versión sin probar antes una acción de escritura (crear una familia, editar una celda).
