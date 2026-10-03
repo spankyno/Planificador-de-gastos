@@ -2,7 +2,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { expenseMonthlyEntry, expenseCategory, family, itemArchive, userPreference } from "@/db/schema";
+import { expenseMonthlyEntry, expenseCategory, family, itemArchive, userPreference, yearLock } from "@/db/schema";
 
 // Cada función exportada de este archivo es un endpoint público: se autentica, se valida la entrada
 // en tiempo de ejecución (los tipos de TypeScript no protegen frente a peticiones manipuladas) y se
@@ -39,6 +39,13 @@ async function requireUser() {
   return userId;
 }
 
+/** Rechaza la operación si alguno de los años está cerrado (candado). */
+async function assertUnlocked(userId: string, years: number[]) {
+  const rows = await getDb().select({ year: yearLock.year }).from(yearLock)
+    .where(and(eq(yearLock.userId, userId), inArray(yearLock.year, [...new Set(years)])));
+  if (rows.length) fail("El año está cerrado");
+}
+
 /** Comprueba que todos los gastos existen y son globales o del usuario. */
 async function assertVisibleCategories(userId: string, ids: string[]) {
   const unique = [...new Set(ids)];
@@ -58,18 +65,24 @@ export async function loadYear(yearInput: number) {
   const userId = await requireUser();
   const year = asYear(yearInput);
   const db = getDb();
-  const [fams, cats, entries, archives, prefs] = await db.batch([
+  const [fams, cats, entries, archives, prefs, locks, dataYears] = await db.batch([
     db.select().from(family).where(or(isNull(family.userId), eq(family.userId, userId))),
     db.select().from(expenseCategory).where(or(isNull(expenseCategory.userId), eq(expenseCategory.userId, userId))),
     db.select().from(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year))),
     db.select().from(itemArchive).where(eq(itemArchive.userId, userId)),
     db.select().from(userPreference).where(eq(userPreference.userId, userId)),
+    db.select().from(yearLock).where(and(eq(yearLock.userId, userId), eq(yearLock.year, year))),
+    db.selectDistinct({ year: expenseMonthlyEntry.year }).from(expenseMonthlyEntry).where(eq(expenseMonthlyEntry.userId, userId)),
   ]);
   const gone = (type: string, id: string) => archives.some((a) => a.itemType === type && a.itemId === id && a.fromYear <= year);
   const families = fams.filter((f) => !gone("family", f.id));
   const ok = new Set(families.map((f) => f.id));
   const categories = cats.filter((c) => ok.has(c.familyId) && !gone("category", c.id));
-  return { families, categories, entries, currency: prefs[0]?.currency ?? "EUR" };
+  return {
+    families, categories, entries, currency: prefs[0]?.currency ?? "EUR",
+    locked: locks.length > 0,
+    years: dataYears.map((r) => r.year).filter((y) => y !== year).sort((a, b) => b - a), // años con datos, para copiar
+  };
 }
 
 /** Estructura completa (incluye bajas) para la pantalla de gestión. */
@@ -90,6 +103,7 @@ export async function saveCells(cellsInput: { categoryId: string; year: number; 
   if (!Array.isArray(cellsInput) || cellsInput.length === 0 || cellsInput.length > MAX_CELLS) fail("Datos no válidos");
   const cells = cellsInput.map((c) => ({ categoryId: asId(c?.categoryId), year: asYear(c?.year), month: asMonth(c?.month), amount: asAmount(c?.amount) }));
   await assertVisibleCategories(userId, cells.map((c) => c.categoryId));
+  await assertUnlocked(userId, cells.map((c) => c.year));
   const db = getDb();
   const stmts = cells.map((c) =>
     db.insert(expenseMonthlyEntry)
@@ -198,4 +212,42 @@ export async function setCurrency(currency: string) {
     target: userPreference.userId,
     set: { currency },
   });
+}
+
+/** Cierra (true) o abre (false) un año. Cerrado: no admite cambios en los importes. */
+export async function setYearLock(yearInput: number, locked: boolean) {
+  const userId = await requireUser();
+  const year = asYear(yearInput);
+  if (typeof locked !== "boolean") fail("Valor no válido");
+  const db = getDb();
+  if (locked) await db.insert(yearLock).values({ userId, year }).onConflictDoNothing();
+  else await db.delete(yearLock).where(and(eq(yearLock.userId, userId), eq(yearLock.year, year)));
+}
+
+/** Pone a cero un año: elimina todos sus importes. */
+export async function resetYear(yearInput: number) {
+  const userId = await requireUser();
+  const year = asYear(yearInput);
+  await assertUnlocked(userId, [year]);
+  await getDb().delete(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, year)));
+}
+
+/** Sustituye los importes de `to` por los de `from`, en una sola operación atómica.
+ *  No copia los gastos ni familias que estén dados de baja en el año de destino. */
+export async function copyYear(fromInput: number, toInput: number) {
+  const userId = await requireUser();
+  const from = asYear(fromInput), to = asYear(toInput);
+  if (from === to) fail("El año de origen y el de destino deben ser distintos");
+  await assertUnlocked(userId, [to]);
+  const db = getDb();
+  await db.batch([
+    db.delete(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, to))),
+    db.run(sql`INSERT INTO expense_monthly_entry (id, expense_category_id, year, month, amount, user_id)
+      SELECT lower(hex(randomblob(16))), e.expense_category_id, ${to}, e.month, e.amount, e.user_id
+      FROM expense_monthly_entry e
+      JOIN expense_category c ON c.id = e.expense_category_id
+      WHERE e.user_id = ${userId} AND e.year = ${from}
+        AND NOT EXISTS (SELECT 1 FROM item_archive a WHERE a.user_id = e.user_id AND a.item_type = 'category' AND a.item_id = c.id AND a.from_year <= ${to})
+        AND NOT EXISTS (SELECT 1 FROM item_archive a WHERE a.user_id = e.user_id AND a.item_type = 'family' AND a.item_id = c.family_id AND a.from_year <= ${to})`),
+  ]);
 }

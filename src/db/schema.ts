@@ -50,3 +50,13 @@ export const itemArchive = sqliteTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.userId, t.itemType, t.itemId] }) })
 );
+
+// Año cerrado: mientras exista la fila, no se pueden modificar los importes de ese año.
+export const yearLock = sqliteTable(
+  "year_lock",
+  {
+    userId: text("user_id").notNull(),
+    year: integer("year").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.year] }) })
+);

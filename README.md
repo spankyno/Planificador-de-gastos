@@ -8,6 +8,8 @@ Planificador de gastos anuales: una **previsión** editable, organizada por fami
 
 - **Cuadrante anual:** grilla de gastos por meses, agrupados en familias colapsables, con subtotales, totales mensuales y total anual. Edición de celdas con actualización optimista.
 - **Periodificación:** repetir o prorratear un importe en los meses elegidos.
+- **Iniciar año:** poner todos los importes de un año a cero, o copiar los valores de otro año (ambas con confirmación).
+- **Candado por año:** un año cerrado no admite cambios en los importes (se comprueba en el servidor).
 - **Gastos y familias** (`/gastos`): vista de tabla con alta, renombrado y baja desde un año (se conserva el historial anterior). El tipo (Fijo, Variable, Discrecional) se asigna a cada gasto.
 - **Informes** (`/informes`): vistas por tipo, familia, gasto y mes, cada una en tabla y en gráfico; desglose de gastos al elegir una familia; comparativa entre hasta 4 años con variación en importe y en %.
 - **Exportación a CSV** del cuadrante y de los informes.
@@ -18,7 +20,7 @@ Planificador de gastos anuales: una **previsión** editable, organizada por fami
 ```
 ├── db/seed.sql              # Familias y gastos globales por defecto
 ├── docs/DATABASE.md         # Cómo crear y actualizar las tablas en D1
-├── migrations/              # 0000 a 0003: esquema y cambios (se aplican con wrangler)
+├── migrations/              # 0000 a 0004: esquema y cambios (se aplican con wrangler)
 ├── src/
 │   ├── app/                 # Páginas, layout, server actions
 │   ├── components/          # Grid, ManageForm, Report, Nav, ThemeToggle, CurrencySelect
