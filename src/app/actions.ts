@@ -2,6 +2,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
+import { copyYearEntries } from "@/lib/copy-year";
 import { expenseMonthlyEntry, expenseCategory, family, itemArchive, userPreference, yearLock } from "@/db/schema";
 
 // Cada función exportada de este archivo es un endpoint público: se autentica, se valida la entrada
@@ -239,15 +240,10 @@ export async function copyYear(fromInput: number, toInput: number) {
   const from = asYear(fromInput), to = asYear(toInput);
   if (from === to) fail("El año de origen y el de destino deben ser distintos");
   await assertUnlocked(userId, [to]);
-  const db = getDb();
-  await db.batch([
-    db.delete(expenseMonthlyEntry).where(and(eq(expenseMonthlyEntry.userId, userId), eq(expenseMonthlyEntry.year, to))),
-    db.run(sql`INSERT INTO expense_monthly_entry (id, expense_category_id, year, month, amount, user_id)
-      SELECT lower(hex(randomblob(16))), e.expense_category_id, ${to}, e.month, e.amount, e.user_id
-      FROM expense_monthly_entry e
-      JOIN expense_category c ON c.id = e.expense_category_id
-      WHERE e.user_id = ${userId} AND e.year = ${from}
-        AND NOT EXISTS (SELECT 1 FROM item_archive a WHERE a.user_id = e.user_id AND a.item_type = 'category' AND a.item_id = c.id AND a.from_year <= ${to})
-        AND NOT EXISTS (SELECT 1 FROM item_archive a WHERE a.user_id = e.user_id AND a.item_type = 'family' AND a.item_id = c.family_id AND a.from_year <= ${to})`),
-  ]);
+  try {
+    await copyYearEntries(getDb(), userId, from, to);
+  } catch (e) {
+    console.error("copyYear falló:", e); // visible en los registros de Cloudflare
+    throw e;
+  }
 }
