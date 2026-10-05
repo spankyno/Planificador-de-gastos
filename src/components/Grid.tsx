@@ -31,6 +31,23 @@ const parseAmount = (raw: string) => {
   return Math.max(0, parseFloat(t) || 0);
 };
 
+// Navegación tipo hoja de cálculo: flechas e Intro mueven entre celdas, Esc cancela el cambio
+function navigate(e: { currentTarget: HTMLInputElement; key: string; shiftKey: boolean; preventDefault: () => void }, original: number) {
+  const el = e.currentTarget;
+  if (e.key === "Escape") { el.value = rawNum(original); el.blur(); return; }
+  let dr = 0, dc = 0;
+  if (e.key === "ArrowDown" || (e.key === "Enter" && !e.shiftKey)) dr = 1;
+  else if (e.key === "ArrowUp" || (e.key === "Enter" && e.shiftKey)) dr = -1;
+  else if (e.key === "ArrowRight" && el.selectionEnd === el.value.length) dc = 1;
+  else if (e.key === "ArrowLeft" && el.selectionStart === 0) dc = -1;
+  else return;
+  e.preventDefault();
+  const list = dr
+    ? Array.from(el.closest("table")!.querySelectorAll<HTMLInputElement>(`input[data-col="${el.dataset.col}"]`))
+    : Array.from(el.closest("tr")!.querySelectorAll<HTMLInputElement>("input[data-col]"));
+  list[list.indexOf(el) + (dr || dc)]?.focus(); // al mover el foco, la celda anterior guarda su valor (onBlur)
+}
+
 export default function Grid({ year, families, categories, entries, currency, locked, years }: { year: number; families: Fam[]; categories: Cat[]; entries: Entry[]; currency: string; locked: boolean; years: number[] }) {
   const router = useRouter();
   const fmt = (n: number) => money(n, currency);
@@ -45,8 +62,12 @@ export default function Grid({ year, families, categories, entries, currency, lo
   const [sMonths, setSMonths] = useState<number[]>(ALL);
   const [isLocked, setIsLocked] = useState(locked);
   const [menu, setMenu] = useState(false);
-  const [confirm, setConfirm] = useState<null | "reset" | "copy">(null);
+  const [confirm, setConfirm] = useState<null | "reset" | "copy" | "unlock">(null);
   const [source, setSource] = useState<number | null>(null);
+  const [pct, setPct] = useState("0");
+  const [onlyType, setOnlyType] = useState<"ALL" | "FIJO" | "VARIABLE" | "DISCRECIONAL">("ALL");
+  const pctNum = Number(pct);
+  const pctValid = pct.trim() !== "" && Number.isFinite(pctNum) && pctNum >= -100 && pctNum <= 1000;
 
   // Tras una operación del servidor (copiar año, etc.) llegan datos nuevos: se sincroniza el estado local
   useEffect(() => { setCells(Object.fromEntries(entries.map((e) => [`${e.expenseCategoryId}|${e.month}`, e.amount]))); }, [entries]);
@@ -95,9 +116,9 @@ export default function Grid({ year, families, categories, entries, currency, lo
   }
 
   function toggleLock() {
-    const next = !isLocked;
-    setIsLocked(next);
-    start(async () => { try { await setYearLock(year, next); } catch { setIsLocked(!next); } });
+    if (isLocked) { setConfirm("unlock"); return; } // abrir un año cerrado pide confirmación
+    setIsLocked(true);
+    start(async () => { try { await setYearLock(year, true); } catch { setIsLocked(false); } });
   }
 
   function runConfirm() {
@@ -105,8 +126,9 @@ export default function Grid({ year, families, categories, entries, currency, lo
     start(async () => {
       try {
         if (action === "reset") { await resetYear(year); setCells({}); }
-        else if (action === "copy" && source) { await copyYear(source, year); router.refresh(); }
-      } catch { router.refresh(); } // p. ej. año cerrado desde otra pestaña: se muestra el estado real
+        else if (action === "copy" && source && pctValid) { await copyYear(source, year, pctNum, onlyType); router.refresh(); }
+        else if (action === "unlock") { setIsLocked(false); await setYearLock(year, false); }
+      } catch { setIsLocked(locked); router.refresh(); } // p. ej. cambio desde otra pestaña: se muestra el estado real
       setConfirm(null);
     });
   }
@@ -134,7 +156,7 @@ export default function Grid({ year, families, categories, entries, currency, lo
                 <div role="menu" className="absolute right-0 z-40 mt-1 w-72 rounded-lg border bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900">
                   <button role="menuitem" disabled={isLocked} onClick={() => { setMenu(false); setConfirm("reset"); }}
                     className="flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><Trash2 size={14} /> Poner todos los gastos a cero…</button>
-                  <button role="menuitem" disabled={isLocked || years.length === 0} onClick={() => { setMenu(false); setSource(years[0] ?? null); setConfirm("copy"); }}
+                  <button role="menuitem" disabled={isLocked || years.length === 0} onClick={() => { setMenu(false); setSource(years[0] ?? null); setPct("0"); setOnlyType("ALL"); setConfirm("copy"); }}
                     className="flex w-full items-center gap-2 rounded px-3 py-2 text-left hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><Copy size={14} /> Copiar valores de otro año…</button>
                   {isLocked && <p className="px-3 py-2 text-xs text-amber-700 dark:text-amber-400">El año está cerrado. Ábrelo con el candado para modificarlo.</p>}
                   {!isLocked && years.length === 0 && <p className="px-3 py-2 text-xs text-slate-500">No hay otros años con importes para copiar.</p>}
@@ -148,7 +170,8 @@ export default function Grid({ year, families, categories, entries, currency, lo
         </div>
       </header>
 
-      <div className="max-h-[calc(100vh-11rem)] overflow-auto scroll-smooth rounded-lg border dark:border-slate-800 xl:max-h-none xl:overflow-visible">
+      <p className="mb-2 text-xs text-slate-500">Teclado: ↑ ↓ ← → e Intro para moverte entre celdas · Esc cancela el cambio.</p>
+      <div className="max-h-[calc(100vh-12.5rem)] overflow-auto scroll-smooth rounded-lg border dark:border-slate-800 xl:max-h-none xl:overflow-visible">
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
             <tr>
@@ -177,10 +200,12 @@ export default function Grid({ year, families, categories, entries, currency, lo
       {confirm && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setConfirm(null)}>
           <div role="alertdialog" aria-modal="true" className="w-full max-w-sm space-y-3 rounded-lg bg-white p-5 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <h2 className="font-semibold">{confirm === "reset" ? `Poner a cero el año ${year}` : `Copiar valores al año ${year}`}</h2>
-            {confirm === "reset" ? (
-              <p className="text-sm text-slate-600 dark:text-slate-400">Se eliminarán todos los importes de {year}. Esta acción no se puede deshacer.</p>
-            ) : (
+            <h2 className="font-semibold">
+              {confirm === "reset" ? `Poner a cero el año ${year}` : confirm === "copy" ? `Copiar valores al año ${year}` : `Abrir el año ${year}`}
+            </h2>
+            {confirm === "reset" && <p className="text-sm text-slate-600 dark:text-slate-400">Se eliminarán todos los importes de {year}. Esta acción no se puede deshacer.</p>}
+            {confirm === "unlock" && <p className="text-sm text-slate-600 dark:text-slate-400">El año {year} está cerrado. Al abrirlo se podrán volver a modificar sus importes.</p>}
+            {confirm === "copy" && (
               <>
                 <p className="text-sm text-slate-600 dark:text-slate-400">Los importes de {year} se sustituirán por los del año que elijas. Esta acción no se puede deshacer.</p>
                 <label className="block text-sm">Copiar desde
@@ -188,13 +213,28 @@ export default function Grid({ year, families, categories, entries, currency, lo
                     {years.map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-sm">Ajuste (%)
+                    <input type="number" step="0.1" min={-100} max={1000} value={pct} onChange={(e) => setPct(e.target.value)}
+                      className={`mt-1 w-full rounded border p-2 dark:bg-slate-800 ${pctValid ? "dark:border-slate-700" : "border-red-500"}`} />
+                  </label>
+                  <label className="block text-sm">Aplicar a
+                    <select className="mt-1 w-full rounded border p-2 dark:border-slate-700 dark:bg-slate-800" value={onlyType} onChange={(e) => setOnlyType(e.target.value as typeof onlyType)}>
+                      <option value="ALL">Todos los gastos</option>
+                      <option value="FIJO">Solo fijos</option>
+                      <option value="VARIABLE">Solo variables</option>
+                      <option value="DISCRECIONAL">Solo discrecionales</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="text-xs text-slate-500">0 copia sin cambios; 3 suma un 3 %; −5 resta un 5 %. Los gastos fuera del tipo elegido se copian sin ajuste.</p>
               </>
             )}
             <div className="flex justify-end gap-2">
               <button className="rounded border px-3 py-1.5 text-sm" onClick={() => setConfirm(null)}>Cancelar</button>
-              <button disabled={pending || (confirm === "copy" && !source)} onClick={runConfirm}
-                className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
-                {confirm === "reset" ? "Poner a cero" : "Copiar y sustituir"}
+              <button disabled={pending || (confirm === "copy" && (!source || !pctValid))} onClick={runConfirm}
+                className={`rounded px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 ${confirm === "unlock" ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"}`}>
+                {confirm === "reset" ? "Poner a cero" : confirm === "copy" ? "Copiar y sustituir" : "Abrir año"}
               </button>
             </div>
           </div>
@@ -248,7 +288,8 @@ function FamilyRows({ f, cats, isOpen, toggle, get, rowTotal, commit, onSpread, 
           </td>
           {ALL.map((m) => (
             <td key={m} className="p-0">
-              <input inputMode="decimal" defaultValue={fmtCell(get(c.id, m))} key={get(c.id, m)}
+              <input inputMode="decimal" defaultValue={fmtCell(get(c.id, m))} key={get(c.id, m)} data-col={m}
+                aria-label={`${c.name}, ${MESES[m - 1]}`} onKeyDown={(e) => navigate(e, get(c.id, m))}
                 readOnly={locked}
                 onFocus={(e) => { if (locked) return; e.target.value = rawNum(get(c.id, m)); e.target.select(); }}
                 onBlur={(e) => { if (locked) return; const v = parseAmount(e.target.value); commit(c.id, m, e.target.value); e.target.value = fmtCell(v); }}

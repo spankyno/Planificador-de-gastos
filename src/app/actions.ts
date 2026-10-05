@@ -235,13 +235,15 @@ export async function resetYear(yearInput: number) {
 
 /** Sustituye los importes de `to` por los de `from`, en una sola operación atómica.
  *  No copia los gastos ni familias que estén dados de baja en el año de destino. */
-export async function copyYear(fromInput: number, toInput: number) {
+export async function copyYear(fromInput: number, toInput: number, percentInput: number = 0, onlyTypeInput: Tipo | "ALL" = "ALL") {
   const userId = await requireUser();
   const from = asYear(fromInput), to = asYear(toInput);
   if (from === to) fail("El año de origen y el de destino deben ser distintos");
+  const percent = typeof percentInput === "number" && Number.isFinite(percentInput) && percentInput >= -100 && percentInput <= 1000 ? percentInput : fail("Porcentaje no válido");
+  const onlyType = onlyTypeInput === "ALL" ? null : asTipo(onlyTypeInput);
   await assertUnlocked(userId, [to]);
   try {
-    await copyYearEntries(getDb(), userId, from, to);
+    await copyYearEntries(getDb(), userId, from, to, percent, onlyType);
   } catch (e) {
     console.error("copyYear falló:", e); // visible en los registros de Cloudflare
     throw e;

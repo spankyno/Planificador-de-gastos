@@ -6,7 +6,7 @@ const a = "text-slate-600 hover:text-blue-600 hover:underline dark:text-slate-40
 
 export default function Footer() {
   return (
-    <footer className="mt-8 border-t border-slate-200 bg-slate-50 text-sm dark:border-slate-800 dark:bg-slate-900/50">
+    <footer className="print:hidden mt-8 border-t border-slate-200 bg-slate-50 text-sm dark:border-slate-800 dark:bg-slate-900/50">
       <div className="mx-auto grid max-w-[1400px] gap-8 px-4 py-8 sm:grid-cols-3">
         <div>
           <p className="font-semibold text-slate-900 dark:text-slate-100">{SITE.name}</p>

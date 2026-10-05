@@ -1,8 +1,8 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { BarChart3, Download, Table2 } from "lucide-react";
+import { BarChart3, Download, Printer, Table2 } from "lucide-react";
 
 type Tipo = "FIJO" | "VARIABLE" | "DISCRECIONAL";
 type Fam = { id: string; name: string; type: Tipo };
@@ -31,6 +31,25 @@ export default function Report({ years, families, categories, entries, currency 
   const [dim, setDim] = useState<Dim>("tipo");
   const [view, setView] = useState<"tabla" | "grafico">("tabla");
   const [famSel, setFamSel] = useState<string | null>(null); // familia abierta en el desglose
+  const [printing, setPrinting] = useState(false); // al imprimir se muestran tabla y gráfico a la vez
+  const [printDate, setPrintDate] = useState("");
+
+  // La impresión siempre sale en tema claro (se quita la clase «dark» mientras dura)
+  useEffect(() => {
+    const root = document.documentElement;
+    let wasDark = false;
+    const before = () => { wasDark = root.classList.contains("dark"); root.classList.remove("dark"); };
+    const after = () => { if (wasDark) root.classList.add("dark"); setPrinting(false); };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => { window.removeEventListener("beforeprint", before); window.removeEventListener("afterprint", after); };
+  }, []);
+
+  const printReport = () => {
+    setPrintDate(new Date().toLocaleDateString("es-ES", { dateStyle: "long" }));
+    setPrinting(true);
+    setTimeout(() => window.print(), 450); // deja que se dibujen tabla y gráfico antes de abrir el diálogo
+  };
   const last = years[years.length - 1];
 
   const rows: Row[] = useMemo(() => {
@@ -96,18 +115,23 @@ export default function Report({ years, families, categories, entries, currency 
   const setYears = (ys: number[]) => router.push(`/informes?y=${[...new Set(ys)].sort().join(",")}`);
 
   return (
-    <main className="mx-auto max-w-6xl space-y-5 p-4 text-slate-900 dark:text-slate-100">
-      <header className="flex flex-wrap items-center gap-2">
+    <main className="mx-auto max-w-6xl space-y-5 p-4 text-slate-900 dark:text-slate-100 print:max-w-none print:p-0">
+      <div className="hidden print:block">
+        <h1 className="text-xl font-bold">Planificador de Gastos · Informe {dimLabel.toLowerCase()}{dim === "familia" && famSel ? `: ${families.find((f) => f.id === famSel)?.name ?? ""}` : ""}</h1>
+        <p className="text-sm text-slate-600">Años: {years.join(", ")} · Moneda: {currency}{printDate ? ` · ${printDate}` : ""}</p>
+      </div>
+      <header className="flex flex-wrap items-center gap-2 print:hidden">
         <h1 className="mr-4 text-xl font-semibold">Informes</h1>
         {options.map((y) => (
           <button key={y} aria-pressed={years.includes(y)}
             onClick={() => setYears(years.includes(y) ? years.filter((x) => x !== y) : [...years, y].slice(-4))}
             className={`rounded border px-3 py-1 text-sm dark:border-slate-700 ${years.includes(y) ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900" : ""}`}>{y}</button>
         ))}
-        <button onClick={exportCsv} className="ml-auto inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"><Download size={14} /> CSV</button>
+        <button onClick={printReport} className="ml-auto inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"><Printer size={14} /> Imprimir / PDF</button>
+        <button onClick={exportCsv} className="inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"><Download size={14} /> CSV</button>
       </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div role="tablist" className="inline-flex overflow-hidden rounded border dark:border-slate-700">
           {DIMS.map((d) => <button key={d.id} role="tab" aria-selected={dim === d.id} className={seg(dim === d.id)} onClick={() => { setDim(d.id); setFamSel(null); }}>{d.label}</button>)}
         </div>
@@ -118,19 +142,21 @@ export default function Report({ years, families, categories, entries, currency 
       </div>
 
       {dim === "familia" && (famSel ? (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm print:hidden">
           <button className="text-blue-600 hover:underline" onClick={() => setFamSel(null)}>← Todas las familias</button>
           <span className="text-slate-400">/</span>
           <span className="font-medium">Desglose de {families.find((f) => f.id === famSel)?.name}</span>
         </div>
-      ) : <p className="text-xs text-slate-500">Haz clic en una familia (en la tabla o en el gráfico) para ver el desglose de sus gastos.</p>)}
+      ) : <p className="text-xs text-slate-500 print:hidden">Haz clic en una familia (en la tabla o en el gráfico) para ver el desglose de sus gastos.</p>)}
 
       {rows.every((r) => years.every((y) => r.vals[y] === 0)) ? (
         <p className="rounded border p-8 text-center text-sm text-slate-500 dark:border-slate-800">No hay importes en los años seleccionados.</p>
-      ) : view === "tabla" ? (
-        <div className="max-h-[calc(100vh-14rem)] overflow-auto rounded-lg border dark:border-slate-800 lg:max-h-none lg:overflow-visible">
+      ) : (
+        <>
+        {(view === "tabla" || printing) && (
+        <div className="max-h-[calc(100vh-14rem)] overflow-auto rounded-lg border dark:border-slate-800 lg:max-h-none lg:overflow-visible print:max-h-none print:overflow-visible">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 dark:bg-slate-900 lg:top-[3.4rem]">
+            <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500 dark:bg-slate-900 lg:top-[3.4rem] print:static">
               <tr className="text-right">
                 <th className="p-3 text-left">{dimLabel}</th>
                 {years.map((y) => <th key={y} className="p-3">{y}</th>)}
@@ -160,7 +186,8 @@ export default function Report({ years, families, categories, entries, currency 
             </tfoot>
           </table>
         </div>
-      ) : (
+        )}
+        {(view === "grafico" || printing) && (
         <div className={`grid grid-cols-[minmax(0,1fr)] gap-6 ${(dim === "tipo" || dim === "familia") ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]" : ""}`}>
           {(dim === "tipo" || dim === "familia") && (
             <section>
@@ -191,8 +218,10 @@ export default function Report({ years, families, categories, entries, currency 
             </ResponsiveContainer>
           </section>
         </div>
+        )}
+        </>
       )}
-      {multi && view === "tabla" && <p className="text-xs text-slate-500">Variación de {years[0]} a {last}. En rojo el gasto sube; en verde baja (ahorro).</p>}
+      {multi && (view === "tabla" || printing) && <p className="text-xs text-slate-500">Variación de {years[0]} a {last}. En rojo el gasto sube; en verde baja (ahorro).</p>}
     </main>
   );
 }

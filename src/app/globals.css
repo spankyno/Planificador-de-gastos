@@ -8,3 +8,12 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgb(148 163 184 / 0.45); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgb(148 163 184 / 0.75); }
+
+/* Impresión / PDF de informes */
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tr, section, figure { break-inside: avoid; }
+  ::-webkit-scrollbar { display: none; }
+}

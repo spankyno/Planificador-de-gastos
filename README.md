@@ -8,11 +8,12 @@ Planificador de gastos anuales: una **previsión** editable, organizada por fami
 
 - **Cuadrante anual:** grilla de gastos por meses, agrupados en familias colapsables, con subtotales, totales mensuales y total anual. Edición de celdas con actualización optimista.
 - **Periodificación:** repetir o prorratear un importe en los meses elegidos.
-- **Iniciar año:** poner todos los importes de un año a cero, o copiar los valores de otro año (ambas con confirmación).
-- **Candado por año:** un año cerrado no admite cambios en los importes (se comprueba en el servidor).
+- **Iniciar año:** poner todos los importes de un año a cero, o copiar los valores de otro año con un ajuste porcentual opcional (por ejemplo +3 %), a todos los gastos o solo a un tipo (ambas con confirmación).
+- **Candado por año:** un año cerrado no admite cambios en los importes (se comprueba en el servidor); abrirlo pide confirmación.
+- **Teclado en el cuadrante:** flechas e Intro para moverte entre celdas, Esc para cancelar un cambio.
 - **Gastos y familias** (`/gastos`): vista de tabla con alta, renombrado y baja desde un año (se conserva el historial anterior). El tipo (Fijo, Variable, Discrecional) se asigna a cada gasto.
 - **Informes** (`/informes`): vistas por tipo, familia, gasto y mes, cada una en tabla y en gráfico; desglose de gastos al elegir una familia; comparativa entre hasta 4 años con variación en importe y en %.
-- **Exportación a CSV** del cuadrante y de los informes.
+- **Exportación a CSV** del cuadrante y de los informes, e **impresión / PDF** de los informes (tabla y gráfico en una vista limpia).
 - **Moneda por usuario** y **tema claro/oscuro**.
 
 ## Estructura
@@ -63,3 +64,4 @@ npm run dev
 - Los elementos con `user_id` nulo son globales (los ve todo el mundo); los propios solo los ve su autor. Las bajas son por usuario (`item_archive`), también para los elementos por defecto.
 - El tipo de gasto vive en `expense_category.type`. La columna `family.type` está en desuso.
 - **Versión de Next.js fijada en 15.4.11.** Con `@cloudflare/next-on-pages` 1.13.x, la 15.5.x rompe las acciones del servidor (Clerk deja de detectar el middleware y devuelve error 500 al guardar). No subas de versión sin probar antes una acción de escritura (crear una familia, editar una celda).
+- **CSP:** `next.config.mjs` la envía en modo «solo informe» (`Content-Security-Policy-Report-Only`). Para activarla: usa la app con la consola del navegador abierta (F12); si no aparecen avisos «[Report Only] Refused to…», cambia esa clave por `Content-Security-Policy`. Si aparece alguno, añade el dominio indicado a la directiva correspondiente antes de activarla.
